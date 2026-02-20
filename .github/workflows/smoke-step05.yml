@@ -1,0 +1,39 @@
+name: Smoke Step05
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Deployed app URL (e.g. https://xxx.vercel.app)"
+        required: true
+        type: string
+      wait_ms:
+        description: "Wait timeout for scheduled post completion"
+        required: false
+        default: "150000"
+        type: string
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Run Step05 smoke
+        run: npm run smoke:step05
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          SMOKE_WAIT_MS: ${{ inputs.wait_ms }}
+          SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SMOKE_SUPABASE_ANON_KEY }}
+          A_EMAIL: ${{ secrets.SMOKE_A_EMAIL }}
+          A_PASSWORD: ${{ secrets.SMOKE_A_PASSWORD }}
+          B_EMAIL: ${{ secrets.SMOKE_B_EMAIL }}
+          B_PASSWORD: ${{ secrets.SMOKE_B_PASSWORD }}
+          SMOKE_A_TOKEN: ${{ secrets.SMOKE_A_TOKEN }}
+          SMOKE_B_TOKEN: ${{ secrets.SMOKE_B_TOKEN }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
