@@ -31,15 +31,28 @@ function mask(text) {
   return `${text.slice(0, 4)}...[redacted]...${text.slice(-3)}`;
 }
 
+function redactSnippet(text) {
+  if (!text) return "";
+  return text
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [redacted]")
+    .replace(/[A-Za-z0-9+/_-]{20,}\.[A-Za-z0-9+/_-]{10,}\.[A-Za-z0-9+/_-]{10,}/g, "[redacted-jwt]")
+    .slice(0, 300);
+}
+
 async function api(path, options = {}) {
   const url = `${BASE_URL}${path}`;
   const response = await fetch(url, options);
+  const rawText = await response.text();
   let body = null;
   const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    body = await response.json();
+  if (contentType.includes("application/json") && rawText) {
+    try {
+      body = JSON.parse(rawText);
+    } catch {
+      body = null;
+    }
   }
-  return { response, body };
+  return { response, body, rawText };
 }
 
 function authHeaders(token) {
@@ -94,12 +107,16 @@ async function resolveTokens() {
 
 async function createBrand(aToken) {
   const payload = { name: `smoke-${Date.now()}`, plan: "free" };
-  const { response, body } = await api("/api/brands", {
+  const { response, body, rawText } = await api("/api/brands", {
     method: "POST",
     headers: authHeaders(aToken),
     body: JSON.stringify(payload)
   });
   if (response.status !== 201 || !body?.brand?.id) {
+    const reqId = response.headers.get("x-request-id") || "n/a";
+    console.error(
+      `[smoke] brand create failed status=${response.status} requestId=${reqId} body=${redactSnippet(rawText)}`
+    );
     throw new Error(`brand create failed: ${response.status}`);
   }
   console.log("[smoke] brand created");

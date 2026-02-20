@@ -1,4 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
+import { assertRequiredEnv, logMissingEnv } from "@/lib/env/required-env";
+
+const AUTH_REQUIRED_ENV = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"];
 
 export class AuthError extends Error {
   status: number;
@@ -19,11 +22,10 @@ function getBearerToken(request: Request): string {
 
 export async function requireUser(request: Request): Promise<{ userId: string; accessToken: string }> {
   const accessToken = getBearerToken(request);
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
-    throw new Error("Supabase env vars are missing");
-  }
+  logMissingEnv("auth.require-user", AUTH_REQUIRED_ENV);
+  assertRequiredEnv("auth.require-user", AUTH_REQUIRED_ENV);
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 
   const supabase = createClient(url, anonKey, {
     auth: { autoRefreshToken: false, persistSession: false }
