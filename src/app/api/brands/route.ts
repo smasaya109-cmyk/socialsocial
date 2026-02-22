@@ -27,6 +27,36 @@ function redactLogText(value: string | undefined): string {
     .replace(/[A-Za-z0-9+/_-]{20,}\.[A-Za-z0-9+/_-]{10,}\.[A-Za-z0-9+/_-]{10,}/g, "[redacted-jwt]");
 }
 
+function safeDetails(value: string | undefined): string | null {
+  const redacted = redactLogText(value);
+  if (!redacted) return null;
+  return redacted.slice(0, 300);
+}
+
+function serializeUnknown(error: unknown): string {
+  try {
+    if (error instanceof Error) {
+      return JSON.stringify({
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    }
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function asPgErrorLike(error: unknown): PgErrorLike | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const candidate = error as PgErrorLike;
+  if (!candidate.code && !candidate.message && !candidate.details && !candidate.hint) {
+    return undefined;
+  }
+  return candidate;
+}
+
 function toSafeHint(error: PgErrorLike | undefined): string {
   if (!error) return "unexpected_error";
   if (error.code === "42501") return "permission_denied";
@@ -36,13 +66,14 @@ function toSafeHint(error: PgErrorLike | undefined): string {
 }
 
 function logServerError(scope: string, requestId: string, error: unknown, pgError?: PgErrorLike) {
-  const err = error instanceof Error ? error : new Error(String(error));
+  const err = error instanceof Error ? error : new Error(serializeUnknown(error));
   console.error(`[${scope}] failure`, {
     requestId,
     name: err.name,
     message: redactLogText(err.message),
     stack: redactLogText(err.stack),
     pgCode: pgError?.code ?? null,
+    pgMessage: redactLogText(pgError?.message),
     pgDetails: redactLogText(pgError?.details),
     pgHint: redactLogText(pgError?.hint)
   });
@@ -72,7 +103,8 @@ function internalErrorResponse(requestId: string, pgError?: PgErrorLike, status 
       error: "Internal",
       requestId,
       code: pgError?.code ?? null,
-      hint: toSafeHint(pgError)
+      hint: redactLogText(pgError?.hint) || toSafeHint(pgError),
+      details: safeDetails(pgError?.details)
     },
     status
   );
@@ -108,10 +140,11 @@ export async function POST(request: Request) {
       .single();
 
     if (brandError || !brand) {
+      const serializedBrandError = serializeUnknown(brandError);
       logServerError(
         "api.brands.create_brand",
         requestId,
-        brandError ?? new Error("brand insert failed"),
+        brandError ? new Error(serializedBrandError) : new Error("brand insert failed"),
         brandError
       );
       if (brandError?.code === "42501") {
@@ -127,10 +160,11 @@ export async function POST(request: Request) {
     });
 
     if (memberError) {
+      const serializedMemberError = serializeUnknown(memberError);
       logServerError(
         "api.brands.create_membership",
         requestId,
-        memberError ?? new Error("membership insert failed"),
+        memberError ? new Error(serializedMemberError) : new Error("membership insert failed"),
         memberError
       );
       if (memberError?.code === "42501") {
@@ -145,7 +179,8 @@ export async function POST(request: Request) {
     if (error instanceof AuthError) {
       return jsonWithRequestId(requestId, { error: error.message, requestId }, error.status);
     }
-    logServerError("api.brands.exception", requestId, error);
-    return internalErrorResponse(requestId);
+    const pgError = asPgErrorLike(error);
+    logServerError("api.brands.exception", requestId, error, pgError);
+    return internalErrorResponse(requestId, pgError);
   }
 }
