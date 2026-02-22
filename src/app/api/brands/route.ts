@@ -1,9 +1,8 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
-import type { PostgrestError } from "@supabase/supabase-js";
+import { createClient, type PostgrestError } from "@supabase/supabase-js";
 import { z } from "zod";
 import { AuthError, requireUser } from "@/lib/auth/require-user";
-import { getSupabaseUserClient } from "@/lib/db/supabase";
 
 export const runtime = "nodejs";
 console.info("[boot] /api/brands module loaded");
@@ -96,6 +95,33 @@ function jsonWithRequestId(requestId: string, body: unknown, status = 200) {
   return response;
 }
 
+function getUserContextClient(accessToken: string) {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) {
+    throw new Error(
+      `missing_supabase_env:${JSON.stringify({
+        missing: [
+          !url ? "SUPABASE_URL" : null,
+          !anonKey ? "SUPABASE_ANON_KEY" : null
+        ].filter(Boolean)
+      })}`
+    );
+  }
+
+  return createClient(url, anonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
+}
+
 function internalErrorResponse(requestId: string, pgError?: PgErrorLike, status = 500) {
   return jsonWithRequestId(
     requestId,
@@ -132,7 +158,17 @@ export async function POST(request: Request) {
       return jsonWithRequestId(requestId, { error: parsed.error.flatten(), requestId }, 400);
     }
 
-    const supabase = getSupabaseUserClient(accessToken);
+    const supabase = getUserContextClient(accessToken);
+    const authCheck = await supabase.auth.getUser();
+    console.info("[auth-check]", {
+      requestId,
+      route: "/api/brands",
+      resolvedUserId: authCheck.data.user?.id
+        ? `${authCheck.data.user.id.slice(0, 6)}...[redacted]`
+        : null,
+      authError: authCheck.error?.message ? redactLogText(authCheck.error.message) : null
+    });
+
     const { data: brand, error: brandError } = await supabase
       .from("brands")
       .insert({ name: parsed.data.name, plan: parsed.data.plan })
