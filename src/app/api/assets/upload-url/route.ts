@@ -95,11 +95,15 @@ export async function POST(request: Request) {
       const { error: insertError } = await supabase.from("media_assets").insert({
         id: assetId,
         brand_id: input.brandId,
+        created_by: userId,
         owner_user_id: userId,
+        r2_key: objectKey,
         object_key: objectKey,
         file_name: input.fileName,
         mime_type: input.mimeType,
         size_bytes: input.sizeBytes,
+        sha256: "pending",
+        retention_until: expiresAt,
         kind: input.kind,
         status: "pending",
         expires_at: expiresAt
