@@ -131,12 +131,18 @@ async function createConnection(aToken, brandId) {
     accessToken: "smoke-token-access",
     refreshToken: "smoke-token-refresh"
   };
-  const { response, body } = await api("/api/social-connections", {
+  const { response, body, rawText } = await api("/api/social-connections", {
     method: "POST",
     headers: authHeaders(aToken),
     body: JSON.stringify(payload)
   });
   if (response.status !== 200 || !body?.connection?.id) {
+    const reqId = response.headers.get("x-request-id") || "n/a";
+    console.error(
+      `[smoke] social connection create failed status=${response.status} requestId=${reqId} body=${redactSnippet(
+        rawText
+      )}`
+    );
     throw new Error(`social connection create failed: ${response.status}`);
   }
   console.log("[smoke] social connection created");
