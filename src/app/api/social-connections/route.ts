@@ -98,13 +98,54 @@ function getMissingEnv(): string[] {
   return missing;
 }
 
+function getInvalidEnvHints(): string[] {
+  const invalid: string[] = [];
+  const rawKeys = process.env.TOKEN_ENCRYPTION_KEYS_JSON;
+  const rawVersion = process.env.TOKEN_ACTIVE_KEY_VERSION;
+  if (!rawKeys || !rawVersion) return invalid;
+
+  try {
+    const parsed = JSON.parse(rawKeys) as Record<string, string>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      invalid.push("TOKEN_ENCRYPTION_KEYS_JSON:not_object");
+      return invalid;
+    }
+    const active = Number(rawVersion);
+    if (!Number.isInteger(active) || active <= 0) {
+      invalid.push("TOKEN_ACTIVE_KEY_VERSION:not_positive_integer");
+      return invalid;
+    }
+    const activeKey = parsed[String(active)];
+    if (!activeKey) {
+      invalid.push("TOKEN_ENCRYPTION_KEYS_JSON:active_key_missing");
+      return invalid;
+    }
+    const keyBytes = Buffer.from(activeKey, "base64");
+    if (keyBytes.length !== 32) {
+      invalid.push("TOKEN_ENCRYPTION_KEYS_JSON:active_key_not_32_bytes");
+    }
+  } catch {
+    invalid.push("TOKEN_ENCRYPTION_KEYS_JSON:invalid_json");
+  }
+  return invalid;
+}
+
 export async function POST(request: Request) {
   const requestId = crypto.randomUUID();
   console.info("[req]", { requestId, route: "/api/social-connections", method: request.method });
   const missing = getMissingEnv();
+  const invalid = getInvalidEnvHints();
   if (missing.length > 0) {
     console.error("[api.social-connections.env] missing required env", { requestId, missing });
     return jsonWithRequestId(requestId, { error: "Service misconfigured", requestId, missing }, 503);
+  }
+  if (invalid.length > 0) {
+    console.error("[api.social-connections.env] invalid env", { requestId, invalid });
+    return jsonWithRequestId(
+      requestId,
+      { error: "Service misconfigured", requestId, invalid },
+      503
+    );
   }
 
   try {

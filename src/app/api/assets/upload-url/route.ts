@@ -9,6 +9,8 @@ import { assertBrandMemberOrNotFound, BrandAccessError } from "@/lib/authz/brand
 import { getSupabaseUserClient } from "@/lib/db/supabase";
 import { acquireRedisLock, releaseRedisLock } from "@/lib/idempotency/lock";
 
+export const runtime = "nodejs";
+
 const schema = z.object({
   brandId: z.string().uuid(),
   fileName: z.string().min(1).max(255),
@@ -17,12 +19,51 @@ const schema = z.object({
   kind: z.enum(["video", "image", "thumbnail"])
 });
 
+function jsonWithRequestId(requestId: string, body: unknown, status = 200) {
+  const response = NextResponse.json(body, { status });
+  response.headers.set("x-request-id", requestId);
+  return response;
+}
+
+function getMissingEnv(): string[] {
+  const missing: string[] = [];
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) missing.push("NEXT_PUBLIC_SUPABASE_URL");
+  if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) missing.push("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  if (!process.env.UPSTASH_REDIS_REST_URL) missing.push("UPSTASH_REDIS_REST_URL");
+  if (!process.env.UPSTASH_REDIS_REST_TOKEN) missing.push("UPSTASH_REDIS_REST_TOKEN");
+  if (!process.env.R2_ENDPOINT) missing.push("R2_ENDPOINT");
+  if (!process.env.R2_ACCESS_KEY_ID) missing.push("R2_ACCESS_KEY_ID");
+  if (!process.env.R2_SECRET_ACCESS_KEY) missing.push("R2_SECRET_ACCESS_KEY");
+  if (!process.env.R2_BUCKET) missing.push("R2_BUCKET");
+  return missing;
+}
+
+async function safeReleaseLock(lockKey: string, requestId: string) {
+  try {
+    await releaseRedisLock(lockKey);
+  } catch (error) {
+    const err = error as { message?: string } | undefined;
+    console.error("[api.assets.upload-url.lock_release_failed]", {
+      requestId,
+      message: err?.message ?? "unknown_error"
+    });
+  }
+}
+
 export async function POST(request: Request) {
+  const requestId = crypto.randomUUID();
+  console.info("[req]", { requestId, route: "/api/assets/upload-url", method: request.method });
+  const missing = getMissingEnv();
+  if (missing.length > 0) {
+    console.error("[api.assets.upload-url.env] missing required env", { requestId, missing });
+    return jsonWithRequestId(requestId, { error: "Service misconfigured", requestId, missing }, 503);
+  }
+
   try {
     const { userId, accessToken } = await requireUser(request);
     const parsed = schema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return jsonWithRequestId(requestId, { error: parsed.error.flatten(), requestId }, 400);
     }
     const input = parsed.data;
     const supabase = getSupabaseUserClient(accessToken);
@@ -64,7 +105,16 @@ export async function POST(request: Request) {
         expires_at: expiresAt
       });
       if (insertError) {
-        return NextResponse.json({ error: "Failed to create pending asset" }, { status: 500 });
+        console.error("[api.assets.upload-url.db_insert_failed]", {
+          requestId,
+          code: insertError.code ?? null,
+          message: insertError.message ?? "insert_error"
+        });
+        return jsonWithRequestId(
+          requestId,
+          { error: "Failed to create pending asset", requestId, code: insertError.code ?? null },
+          insertError.code === "42501" ? 404 : 500
+        );
       }
 
       const presigned = await createPresignedPutUrl({
@@ -72,23 +122,32 @@ export async function POST(request: Request) {
         mimeType: input.mimeType
       });
 
-      return NextResponse.json({
+      return jsonWithRequestId(requestId, {
         assetId,
         objectKey,
         putUrl: presigned.url,
         expiresIn: presigned.expiresIn
       });
     } finally {
-      await releaseRedisLock(quotaLockKey);
+      await safeReleaseLock(quotaLockKey, requestId);
     }
   } catch (error) {
+    const err = error as { message?: string; stack?: string } | undefined;
+    console.error("[api.assets.upload-url.exception]", {
+      requestId,
+      message: err?.message ?? "unknown_error",
+      stack: err?.stack ?? null
+    });
     if (
       error instanceof AuthError ||
       error instanceof BrandAccessError ||
       error instanceof AssetQuotaError
     ) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return jsonWithRequestId(requestId, { error: error.message, requestId }, error.status);
     }
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    if (err?.message?.includes("env vars are missing") || err?.message?.includes("R2_BUCKET is required")) {
+      return jsonWithRequestId(requestId, { error: "Service misconfigured", requestId }, 503);
+    }
+    return jsonWithRequestId(requestId, { error: "Internal server error", requestId }, 500);
   }
 }
