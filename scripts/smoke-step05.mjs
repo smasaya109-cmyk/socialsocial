@@ -265,6 +265,18 @@ async function runUploadRace(aToken, brandId) {
   const statuses = [r1.response.status, r2.response.status].sort((a, b) => a - b);
   const ok = (statuses[0] === 200 && statuses[1] === 409) || (statuses[0] === 409 && statuses[1] === 409);
   if (!ok) {
+    const r1ReqId = r1.response.headers.get("x-request-id") || "n/a";
+    const r2ReqId = r2.response.headers.get("x-request-id") || "n/a";
+    console.error(
+      `[smoke] upload race detail r1 status=${r1.response.status} requestId=${r1ReqId} body=${redactSnippet(
+        r1.rawText
+      )}`
+    );
+    console.error(
+      `[smoke] upload race detail r2 status=${r2.response.status} requestId=${r2ReqId} body=${redactSnippet(
+        r2.rawText
+      )}`
+    );
     throw new Error(`unexpected upload race statuses: ${statuses.join(",")}`);
   }
   console.log(`[smoke] upload race ok statuses=${statuses.join(",")}`);
