@@ -40,3 +40,19 @@ Step6へ進む前に以下を満たす:
 2. A/B分離の404が確認済み
 3. delay実行で `posted` or `failed` まで遷移確認済み
 4. upload-url競合時の上限すり抜けが無い
+
+## Verification Record (Passed)
+- Date (UTC): 2026-02-23
+- Target: `https://socialsocial-three.vercel.app`
+- Command: `npm run smoke:step05`
+- Result: PASS
+- Key evidence:
+  - `A/B isolation ok (404)`
+  - `internal due auth check ok (200)`
+  - `upload race ok statuses=200,409`
+  - `schedule created ... status=queued triggerEnqueued=true`
+  - `schedule status=posted`
+  - `step05 smoke passed`
+- Example IDs:
+  - `scheduleId=abdc0b0d-07a8-40b0-93ec-d40f455d78d5`
+  - `triggerRunId=run_cmlyunsfagqre0hmxsv0s5rqk`

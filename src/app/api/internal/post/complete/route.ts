@@ -48,6 +48,40 @@ export async function POST(request: Request) {
         ? { status: "posted", posted_at: new Date().toISOString(), error_code: null }
         : { status: "failed", error_code: input.errorCode ?? "PROVIDER_ERROR" };
 
+    const { error: deliveryError } = await supabase.from("post_deliveries").insert({
+      brand_id: post.brand_id,
+      scheduled_post_id: post.id,
+      provider: input.provider,
+      provider_post_id: input.providerPostId ?? null,
+      status: nextStatus,
+      idempotency_key: input.idempotencyKey,
+      error_message: input.errorCode ?? null
+    });
+    if (deliveryError && deliveryError.code !== "23505") {
+      console.error("[api.internal.post.complete] post_deliveries insert failed", {
+        code: deliveryError.code ?? null,
+        message: deliveryError.message ?? "delivery_insert_failed"
+      });
+      return NextResponse.json({ error: "Internal", code: deliveryError.code ?? null }, { status: 500 });
+    }
+
+    const { error: publishLogError } = await supabase.from("publish_logs").insert({
+      brand_id: post.brand_id,
+      scheduled_post_id: post.id,
+      result: input.result,
+      provider_response_masked: input.providerResponseMasked
+        ? redactBody(input.providerResponseMasked)
+        : null,
+      error_code: input.errorCode ?? null
+    });
+    if (publishLogError) {
+      console.error("[api.internal.post.complete] publish_logs insert failed", {
+        code: publishLogError.code ?? null,
+        message: publishLogError.message ?? "publish_log_insert_failed"
+      });
+      return NextResponse.json({ error: "Internal", code: publishLogError.code ?? null }, { status: 500 });
+    }
+
     const { data: changedRows, error: statusError } = await supabase
       .from("scheduled_posts")
       .update(patch)
@@ -58,26 +92,6 @@ export async function POST(request: Request) {
     if (statusError || !changedRows || changedRows.length === 0) {
       return NextResponse.json({ ok: false, reason: "cas_failed" }, { status: 200 });
     }
-
-    await supabase.from("post_deliveries").insert({
-      brand_id: post.brand_id,
-      scheduled_post_id: post.id,
-      provider: input.provider,
-      provider_post_id: input.providerPostId ?? null,
-      status: nextStatus,
-      idempotency_key: input.idempotencyKey,
-      error_message: input.errorCode ?? null
-    });
-
-    await supabase.from("publish_logs").insert({
-      brand_id: post.brand_id,
-      scheduled_post_id: post.id,
-      result: input.result,
-      provider_response_masked: input.providerResponseMasked
-        ? redactBody(input.providerResponseMasked)
-        : null,
-      error_code: input.errorCode ?? null
-    });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

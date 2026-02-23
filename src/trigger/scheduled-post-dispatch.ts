@@ -1,12 +1,27 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { acquireIdempotencyLock } from "@/lib/idempotency/lock";
 import { redactBody, redactToken } from "@/lib/logging/redaction";
+import { resolveProviderClient } from "@/lib/providers";
 import { isSafeModeDuplicate } from "@/lib/safe-mode/similarity";
 import { decryptSecret } from "@/lib/security/encryption";
 
 type DispatchPayload = {
   scheduledPostId: string;
 };
+
+function maskUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return "[invalid-url]";
+  }
+}
+
+function snippet(text: string): string {
+  if (!text) return "";
+  return redactBody(text).slice(0, 140);
+}
 
 type ClaimResponse =
   | {
@@ -33,7 +48,17 @@ export const scheduledPostDispatch = task({
   run: async (payload: DispatchPayload) => {
     const baseUrl = process.env.INTERNAL_API_BASE_URL;
     const internalApiKey = process.env.INTERNAL_API_KEY;
+    logger.info("Dispatch task started", {
+      scheduledPostId: payload.scheduledPostId,
+      baseUrl: baseUrl ? maskUrl(baseUrl) : null,
+      hasInternalApiKey: Boolean(internalApiKey)
+    });
+
     if (!baseUrl || !internalApiKey) {
+      logger.error("Dispatch task missing required env", {
+        hasBaseUrl: Boolean(baseUrl),
+        hasInternalApiKey: Boolean(internalApiKey)
+      });
       throw new Error("INTERNAL_API_BASE_URL and INTERNAL_API_KEY are required");
     }
 
@@ -47,6 +72,12 @@ export const scheduledPostDispatch = task({
     });
 
     if (!claimResponse.ok) {
+      const claimText = await claimResponse.text().catch(() => "");
+      logger.error("Claim request failed", {
+        scheduledPostId: payload.scheduledPostId,
+        status: claimResponse.status,
+        body: snippet(claimText)
+      });
       if (claimResponse.status === 404 || claimResponse.status === 409) {
         return { skipped: true, reason: "not_claimable" };
       }
@@ -54,6 +85,11 @@ export const scheduledPostDispatch = task({
     }
 
     const claimed = (await claimResponse.json()) as ClaimResponse;
+    logger.info("Claim request completed", {
+      scheduledPostId: payload.scheduledPostId,
+      claimed: claimed.claimed,
+      reason: claimed.claimed ? null : claimed.reason
+    });
     if (!claimed.claimed) {
       return { skipped: true, reason: claimed.reason };
     }
@@ -64,7 +100,7 @@ export const scheduledPostDispatch = task({
       providerPostId?: string;
       providerResponseMasked?: string;
     }) => {
-      await fetch(`${baseUrl}/api/internal/post/complete`, {
+      const completeResponse = await fetch(`${baseUrl}/api/internal/post/complete`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -79,6 +115,20 @@ export const scheduledPostDispatch = task({
           providerPostId: input.providerPostId,
           providerResponseMasked: input.providerResponseMasked
         })
+      });
+      if (!completeResponse.ok) {
+        const completeText = await completeResponse.text().catch(() => "");
+        logger.error("Complete request failed", {
+          scheduledPostId: claimed.post.id,
+          status: completeResponse.status,
+          body: snippet(completeText)
+        });
+        throw new Error(`Complete failed: ${completeResponse.status}`);
+      }
+      logger.info("Complete request succeeded", {
+        scheduledPostId: claimed.post.id,
+        result: input.result,
+        errorCode: input.errorCode ?? null
       });
     };
 
@@ -119,6 +169,29 @@ export const scheduledPostDispatch = task({
         providerResponseMasked: "stub-failure"
       });
       return { ok: false, scheduledPostId: claimed.post.id };
+    }
+
+    if (stubMode === "off") {
+      const providerClient = resolveProviderClient(claimed.connection.provider);
+      const result = await providerClient.publish({
+        provider: claimed.connection.provider,
+        accessToken,
+        body: claimed.post.body
+      });
+      if (!result.ok) {
+        await complete({
+          result: "failed",
+          errorCode: result.errorCode ?? "PROVIDER_CLIENT_ERROR",
+          providerResponseMasked: result.providerResponseMasked ?? "provider-client-failed"
+        });
+        return { ok: false, scheduledPostId: claimed.post.id };
+      }
+      await complete({
+        result: "published",
+        providerPostId: result.providerPostId,
+        providerResponseMasked: result.providerResponseMasked ?? "provider-client-success"
+      });
+      return { ok: true, scheduledPostId: claimed.post.id };
     }
 
     const providerPostId = `mock_${claimed.post.id}`;

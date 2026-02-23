@@ -31,6 +31,7 @@ Instagram / X / Threads / TikTok をブランド単位で予約・自動投稿�
 - `npm run lint`: ESLint
 - `HOSTNAME=127.0.0.1 PORT=3001 npm run dev`: バインド先/ポート指定
 - `npm run smoke:step05`: Step5スモーク（デプロイ先向け）
+- `npm run smoke:step06:x`: Step6 x-providerスモーク（`PROVIDER_STUB_MODE=off` 前提）
 - `npm run smoke:help`: smoke実行に必要な環境変数表示
 
 ## npm Install Troubleshooting
@@ -76,8 +77,22 @@ Step6へ進む条件:
 3. delay実行で予約投稿の状態遷移（`posted|failed`）を確認
 4. upload-url 競合で上限すり抜けがないことを確認
 
+Step5.5 実績（2026-02-23, deploy target）:
+- `A/B isolation ok (404)`
+- `internal due auth check ok (200)`
+- `upload race ok statuses=200,409`
+- `schedule status=posted`
+- `step05 smoke passed`
+- 判定: Step6へ進行可
+
+Step6 着手（初期）:
+- Provider client layer を追加（`src/lib/providers/*`）
+- `scheduled-post-dispatch` に `PROVIDER_STUB_MODE=off` 時の provider resolver 分岐を追加
+- 既定値 `PROVIDER_STUB_MODE=success` のため、既存 smoke 挙動は維持
+
 ## Step docs
 - `docs/steps/step-01-foundation.md`
 - `docs/steps/step-02-auth-rls.md`
 - `docs/steps/step-04-assets-r2.md`
 - `docs/steps/step-05-scheduling.md`
+- `docs/steps/step-06-sns-clients.md`

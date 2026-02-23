@@ -107,7 +107,32 @@ export async function GET(request: Request, context: { params: { id: string } })
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ scheduledPost: post });
+    const [deliveryRes, publishLogRes] = await Promise.all([
+      supabase
+        .from("post_deliveries")
+        .select("id,provider,provider_post_id,status,error_message,created_at")
+        .eq("scheduled_post_id", scheduledPostId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("publish_logs")
+        .select("id,result,error_code,provider_response_masked,created_at")
+        .eq("scheduled_post_id", scheduledPostId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    ]);
+
+    return NextResponse.json({
+      scheduledPost: post,
+      delivery: deliveryRes.error ? null : (deliveryRes.data ?? null),
+      publishLog: publishLogRes.error ? null : (publishLogRes.data ?? null),
+      diagnostics: {
+        deliveryQueryErrorCode: deliveryRes.error?.code ?? null,
+        publishLogQueryErrorCode: publishLogRes.error?.code ?? null
+      }
+    });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
