@@ -168,12 +168,14 @@ async function createSchedule(aToken, brandId, connectionId) {
   if (response.status !== 200 || !body?.scheduledPost?.id) {
     throw new Error(`schedule create failed: ${response.status}`);
   }
+  const scheduleId = body.scheduledPost.id;
+  const triggerRunId = body.scheduledPost.triggerRunId || body.scheduledPost.trigger_run_id || null;
   console.log(
-    `[smoke] schedule created status=${body.scheduledPost.status} triggerEnqueued=${String(
-      body.triggerEnqueued
-    )}`
+    `[smoke] schedule created scheduleId=${scheduleId} triggerRunId=${triggerRunId || "n/a"} status=${
+      body.scheduledPost.status
+    } triggerEnqueued=${String(body.triggerEnqueued)}`
   );
-  return body.scheduledPost.id;
+  return { scheduleId, triggerRunId };
 }
 
 async function assertBForbiddenOnABrand(bToken, brandId) {
@@ -247,6 +249,29 @@ async function waitForScheduleCompletion(aToken, scheduleId) {
   throw new Error("schedule did not complete within timeout");
 }
 
+async function diagnoseDueList(scheduleId) {
+  if (!INTERNAL_API_KEY) {
+    console.log("[smoke] INTERNAL_API_KEY not provided; skip due-list diagnosis");
+    return;
+  }
+  const { response, body, rawText } = await api("/api/internal/post/due", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-internal-api-key": INTERNAL_API_KEY
+    },
+    body: JSON.stringify({ limit: 200 })
+  });
+  if (response.status !== 200) {
+    console.error(
+      `[smoke] due-list diagnosis failed status=${response.status} body=${redactSnippet(rawText)}`
+    );
+    return;
+  }
+  const postIds = Array.isArray(body?.postIds) ? body.postIds : [];
+  console.log(`[smoke] due-list contains schedule=${postIds.includes(scheduleId)}`);
+}
+
 async function runUploadRace(aToken, brandId) {
   const req = () =>
     api("/api/assets/upload-url", {
@@ -290,13 +315,19 @@ async function main() {
 
     const brandId = await createBrand(aToken);
     const connectionId = await createConnection(aToken, brandId);
-    const scheduleId = await createSchedule(aToken, brandId, connectionId);
+    const { scheduleId, triggerRunId } = await createSchedule(aToken, brandId, connectionId);
 
     await assertBForbiddenOnABrand(bToken, brandId);
     await checkInternalDueAuth();
     await runUploadRace(aToken, brandId);
 
-    const status = await waitForScheduleCompletion(aToken, scheduleId);
+    const status = await waitForScheduleCompletion(aToken, scheduleId).catch(async (error) => {
+      await diagnoseDueList(scheduleId);
+      const message = error instanceof Error ? error.message : "unknown error";
+      throw new Error(
+        `schedule did not complete (scheduleId=${scheduleId}, triggerRunId=${triggerRunId || "n/a"}): ${message}`
+      );
+    });
     console.log(`[smoke] schedule completed with status=${status}`);
     console.log("[smoke] step05 smoke passed");
   } catch (error) {
