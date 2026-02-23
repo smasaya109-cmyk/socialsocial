@@ -17,7 +17,7 @@ function getBearerToken(request: Request): string {
   if (!authHeader?.toLowerCase().startsWith("bearer ")) {
     throw new AuthError("Unauthorized", 401);
   }
-  return authHeader.slice(7);
+  return authHeader.slice(7).trim();
 }
 
 export async function requireUser(request: Request): Promise<{ userId: string; accessToken: string }> {

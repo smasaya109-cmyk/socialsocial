@@ -32,6 +32,12 @@ function safeDetails(value: string | undefined): string | null {
   return redacted.slice(0, 300);
 }
 
+function maskId(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (value.length < 8) return "[redacted]";
+  return `${value.slice(0, 6)}...[redacted]`;
+}
+
 function serializeUnknown(error: unknown): string {
   try {
     if (error instanceof Error) {
@@ -109,11 +115,21 @@ function getUserContextClient(accessToken: string) {
     );
   }
 
+  const authFetch: typeof fetch = async (input, init) => {
+    const headers = new Headers(init?.headers ?? {});
+    headers.set("authorization", `Bearer ${accessToken}`);
+    return fetch(input, {
+      ...init,
+      headers
+    });
+  };
+
   return createClient(url, anonKey, {
     global: {
       headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
+        authorization: `Bearer ${accessToken}`
+      },
+      fetch: authFetch
     },
     auth: {
       autoRefreshToken: false,
@@ -159,14 +175,17 @@ export async function POST(request: Request) {
     }
 
     const supabase = getUserContextClient(accessToken);
-    const authCheck = await supabase.auth.getUser();
+    const debugJwt = await supabase.rpc("debug_jwt");
+    const debugUidRaw =
+      debugJwt.data && typeof debugJwt.data === "object" && "uid" in debugJwt.data
+        ? (debugJwt.data as { uid?: string | null }).uid
+        : null;
     console.info("[auth-check]", {
       requestId,
       route: "/api/brands",
-      resolvedUserId: authCheck.data.user?.id
-        ? `${authCheck.data.user.id.slice(0, 6)}...[redacted]`
-        : null,
-      authError: authCheck.error?.message ? redactLogText(authCheck.error.message) : null
+      debugJwtUid: maskId(debugUidRaw),
+      debugJwtErrorCode: debugJwt.error?.code ?? null,
+      debugJwtErrorMessage: debugJwt.error?.message ? redactLogText(debugJwt.error.message) : null
     });
 
     const { data: brand, error: brandError } = await supabase
