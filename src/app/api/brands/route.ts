@@ -118,6 +118,7 @@ function getUserContextClient(accessToken: string) {
   const authFetch: typeof fetch = async (input, init) => {
     const headers = new Headers(init?.headers ?? {});
     headers.set("authorization", `Bearer ${accessToken}`);
+    headers.set("apikey", anonKey);
     return fetch(input, {
       ...init,
       headers
@@ -175,17 +176,30 @@ export async function POST(request: Request) {
     }
 
     const supabase = getUserContextClient(accessToken);
-    const debugJwt = await supabase.rpc("debug_jwt");
+    const debugJwt2 = await supabase.rpc("debug_jwt2");
     const debugUidRaw =
-      debugJwt.data && typeof debugJwt.data === "object" && "uid" in debugJwt.data
-        ? (debugJwt.data as { uid?: string | null }).uid
+      debugJwt2.data && typeof debugJwt2.data === "object" && "uid" in debugJwt2.data
+        ? (debugJwt2.data as { uid?: string | null }).uid
         : null;
-    console.info("[auth-check]", {
+    const hasClaims =
+      debugJwt2.data && typeof debugJwt2.data === "object" && "claims" in debugJwt2.data
+        ? (debugJwt2.data as { claims?: unknown }).claims != null
+        : false;
+
+    if (debugJwt2.error) {
+      console.error("[brands] debug_jwt2_error", {
+        requestId,
+        code: debugJwt2.error.code ?? null,
+        message: redactLogText(debugJwt2.error.message),
+        details: safeDetails(debugJwt2.error.details),
+        hint: redactLogText(debugJwt2.error.hint)
+      });
+    }
+
+    console.info("[brands] debug_jwt2", {
       requestId,
-      route: "/api/brands",
-      debugJwtUid: maskId(debugUidRaw),
-      debugJwtErrorCode: debugJwt.error?.code ?? null,
-      debugJwtErrorMessage: debugJwt.error?.message ? redactLogText(debugJwt.error.message) : null
+      uid: maskId(debugUidRaw),
+      claims: hasClaims ? "[present]" : null
     });
 
     const { data: brand, error: brandError } = await supabase
