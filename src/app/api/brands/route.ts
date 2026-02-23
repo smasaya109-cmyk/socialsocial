@@ -202,13 +202,15 @@ export async function POST(request: Request) {
       claims: hasClaims ? "[present]" : null
     });
 
-    const { data: brand, error: brandError } = await supabase
-      .from("brands")
-      .insert({ name: parsed.data.name, plan: parsed.data.plan })
-      .select("id,name,plan,created_at")
-      .single();
+    const brand = {
+      id: crypto.randomUUID(),
+      name: parsed.data.name,
+      plan: parsed.data.plan
+    };
 
-    if (brandError || !brand) {
+    const { error: brandError } = await supabase.from("brands").insert(brand);
+
+    if (brandError) {
       const serializedBrandError = serializeUnknown(brandError);
       logServerError(
         "api.brands.create_brand",
