@@ -9,6 +9,7 @@ const A_EMAIL = process.env.A_EMAIL;
 const A_PASSWORD = process.env.A_PASSWORD;
 const SMOKE_A_TOKEN = process.env.SMOKE_A_TOKEN;
 const CONNECTION_ID = process.env.CONNECTION_ID;
+const BRAND_ID = process.env.BRAND_ID;
 
 const WAIT_MS = Number(process.env.SMOKE_WAIT_MS || 180000);
 const POLL_MS = Number(process.env.SMOKE_POLL_MS || 10000);
@@ -191,7 +192,10 @@ async function main() {
   try {
     const aToken = await resolveToken();
     console.log(`[smoke6] token=${mask(aToken)}`);
-    const brandId = await createBrand(aToken);
+    const brandId = CONNECTION_ID ? BRAND_ID : await createBrand(aToken);
+    if (CONNECTION_ID && !brandId) {
+      throw new Error("BRAND_ID is required when CONNECTION_ID is provided");
+    }
     console.log(`[smoke6] brand=${brandId}`);
     let connectionId = CONNECTION_ID || null;
     if (!connectionId) {

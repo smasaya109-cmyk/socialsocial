@@ -29,6 +29,69 @@ async function readResponseText(response: Response): Promise<string> {
   }
 }
 
+type XErrorPayload = {
+  title?: string;
+  detail?: string;
+  type?: string;
+  errors?: Array<{ message?: string; title?: string; detail?: string; type?: string }>;
+};
+
+function parseXErrorPayload(raw: string): XErrorPayload | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as XErrorPayload;
+    if (parsed && typeof parsed === "object") return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function extractXErrorText(payload: XErrorPayload | null): string {
+  if (!payload) return "";
+  const values = [
+    payload.title,
+    payload.detail,
+    payload.type,
+    payload.errors?.[0]?.title,
+    payload.errors?.[0]?.detail,
+    payload.errors?.[0]?.message,
+    payload.errors?.[0]?.type
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return values;
+}
+
+function classifyXError(status: number, payload: XErrorPayload | null): string {
+  const text = extractXErrorText(payload);
+
+  if (status === 401) return "X_UNAUTHORIZED";
+  if (status === 403) {
+    if (text.includes("scope") || text.includes("permission")) return "X_SCOPE_MISSING";
+    if (text.includes("suspended") || text.includes("locked")) return "X_ACCOUNT_RESTRICTED";
+    return "X_FORBIDDEN";
+  }
+  if (status === 429) return "X_RATE_LIMIT";
+  if (status >= 500) return "X_PROVIDER_UNAVAILABLE";
+
+  if (status === 400) {
+    if (text.includes("duplicate") || text.includes("already")) return "X_DUPLICATE_CONTENT";
+    if (text.includes("too long") || text.includes("length")) return "X_TEXT_TOO_LONG";
+    if (text.includes("invalid request") || text.includes("invalid")) return "X_BAD_REQUEST";
+    return "X_BAD_REQUEST";
+  }
+
+  return "X_PROVIDER_ERROR";
+}
+
+function buildMaskedFailure(status: number, raw: string, payload: XErrorPayload | null): string {
+  const text = extractXErrorText(payload);
+  const primary = text ? maskResponseSnippet(text) : maskResponseSnippet(raw);
+  return `status=${status} body=${primary}`;
+}
+
 export class XProviderClient implements ProviderClient {
   async publish(input: ProviderPublishInput): Promise<ProviderPublishResult> {
     const apiBase = process.env.X_API_BASE_URL || "https://api.x.com/2";
@@ -56,39 +119,11 @@ export class XProviderClient implements ProviderClient {
 
       if (!response.ok) {
         const raw = await readResponseText(response);
-        const masked = maskResponseSnippet(raw);
-        if (response.status === 401 || response.status === 403) {
-          return {
-            ok: false,
-            errorCode: "X_UNAUTHORIZED",
-            providerResponseMasked: `status=${response.status} body=${masked}`
-          };
-        }
-        if (response.status === 429) {
-          return {
-            ok: false,
-            errorCode: "X_RATE_LIMIT",
-            providerResponseMasked: `status=429 body=${masked}`
-          };
-        }
-        if (response.status >= 500) {
-          return {
-            ok: false,
-            errorCode: "X_PROVIDER_UNAVAILABLE",
-            providerResponseMasked: `status=${response.status} body=${masked}`
-          };
-        }
-        if (response.status === 400) {
-          return {
-            ok: false,
-            errorCode: "X_BAD_REQUEST",
-            providerResponseMasked: `status=400 body=${masked}`
-          };
-        }
+        const payload = parseXErrorPayload(raw);
         return {
           ok: false,
-          errorCode: "X_PROVIDER_ERROR",
-          providerResponseMasked: `status=${response.status} body=${masked}`
+          errorCode: classifyXError(response.status, payload),
+          providerResponseMasked: buildMaskedFailure(response.status, raw, payload)
         };
       }
 
