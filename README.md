@@ -90,6 +90,29 @@ Step6 着手（初期）:
 - `scheduled-post-dispatch` に `PROVIDER_STUB_MODE=off` 時の provider resolver 分岐を追加
 - 既定値 `PROVIDER_STUB_MODE=success` のため、既存 smoke 挙動は維持
 
+## Provider Status (Current)
+- X:
+  - 予約実行フロー（queue -> processing -> posted/failed）は動作確認済み。
+  - `PROVIDER_STUB_MODE=success|fail` の場合は stub 実行（`providerPostId=mock_*`）。
+  - 実API投稿を使うには `PROVIDER_STUB_MODE=off` かつ有効なXトークン/設定が必要。
+- Instagram / Threads / TikTok:
+  - APIクライアントの枠は実装済み。
+  - 現時点では未実装扱い（`*_NOT_IMPLEMENTED`）で、実投稿は未対応。
+
+## X OAuth Auto Connect
+- `POST /api/auth/x/start` (auth required)
+  - body: `{ "brandId": "<uuid>" }`
+  - response: `{ authorizeUrl, state, expiresIn }`
+  - `authorizeUrl` をブラウザで開いてX同意へ進む。
+- `GET /api/auth/x/callback`
+  - Xからの `code/state` を受け、サーバ側で token exchange を実行。
+  - `social_connections` に暗号化保存して連携完了。
+- Required env:
+  - `X_CLIENT_ID`
+  - `X_CLIENT_SECRET`
+  - `X_OAUTH_REDIRECT_URI` (X consoleに登録したcallbackと完全一致)
+  - optional: `X_OAUTH_SCOPE`
+
 ## Step docs
 - `docs/steps/step-01-foundation.md`
 - `docs/steps/step-02-auth-rls.md`

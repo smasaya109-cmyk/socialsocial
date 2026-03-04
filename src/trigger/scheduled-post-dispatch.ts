@@ -162,6 +162,11 @@ export const scheduledPostDispatch = task({
     });
 
     const stubMode = process.env.PROVIDER_STUB_MODE ?? "success";
+    logger.info("Dispatch provider mode", {
+      scheduledPostId: claimed.post.id,
+      provider: claimed.connection.provider,
+      stubMode
+    });
     if (stubMode === "fail") {
       await complete({
         result: "failed",
@@ -177,6 +182,12 @@ export const scheduledPostDispatch = task({
         provider: claimed.connection.provider,
         accessToken,
         body: claimed.post.body
+      });
+      logger.info("Provider client result", {
+        scheduledPostId: claimed.post.id,
+        provider: claimed.connection.provider,
+        ok: result.ok,
+        errorCode: result.errorCode ?? null
       });
       if (!result.ok) {
         await complete({

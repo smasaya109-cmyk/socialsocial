@@ -61,3 +61,6 @@
 - Added smoke:
   - `scripts/smoke-step06-x.mjs`
   - 目的: deploy先で x provider の完了遷移と `errorCode` 分類を確認
+- OAuth connect automation:
+  - `POST /api/auth/x/start` to generate state/PKCE and authorize URL
+  - `GET /api/auth/x/callback` to exchange code and persist encrypted tokens

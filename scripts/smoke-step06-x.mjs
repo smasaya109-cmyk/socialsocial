@@ -8,6 +8,7 @@ const SUPABASE_ANON_KEY =
 const A_EMAIL = process.env.A_EMAIL;
 const A_PASSWORD = process.env.A_PASSWORD;
 const SMOKE_A_TOKEN = process.env.SMOKE_A_TOKEN;
+const CONNECTION_ID = process.env.CONNECTION_ID;
 
 const WAIT_MS = Number(process.env.SMOKE_WAIT_MS || 180000);
 const POLL_MS = Number(process.env.SMOKE_POLL_MS || 10000);
@@ -121,6 +122,26 @@ async function createXConnection(aToken, brandId) {
   return body.connection.id;
 }
 
+async function verifyConnection(aToken, brandId, connectionId) {
+  const { response, rawText } = await api("/api/schedules", {
+    method: "POST",
+    headers: authHeaders(aToken),
+    body: JSON.stringify({
+      brandId,
+      connectionId,
+      body: `step06 connection-verify ${Date.now()}`,
+      scheduledAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      safeModeEnabled: false
+    })
+  });
+  if (response.status !== 200) {
+    throw new Error(
+      `provided CONNECTION_ID is not usable status=${response.status} body=${redactSnippet(rawText)}`
+    );
+  }
+  console.log(`[smoke6] provided connection verified connectionId=${connectionId}`);
+}
+
 async function createSchedule(aToken, brandId, connectionId) {
   const payload = {
     brandId,
@@ -172,7 +193,12 @@ async function main() {
     console.log(`[smoke6] token=${mask(aToken)}`);
     const brandId = await createBrand(aToken);
     console.log(`[smoke6] brand=${brandId}`);
-    const connectionId = await createXConnection(aToken, brandId);
+    let connectionId = CONNECTION_ID || null;
+    if (!connectionId) {
+      connectionId = await createXConnection(aToken, brandId);
+    } else {
+      await verifyConnection(aToken, brandId, connectionId);
+    }
     console.log(`[smoke6] connection=${connectionId}`);
     const scheduleId = await createSchedule(aToken, brandId, connectionId);
     console.log(`[smoke6] schedule=${scheduleId}`);
@@ -188,6 +214,9 @@ async function main() {
       throw new Error(
         `posted without publish log/delivery record diagnostics=${JSON.stringify(completed.diagnostics || {})}`
       );
+    }
+    if (completed.status === "posted" && String(completed.providerPostId).startsWith("mock_")) {
+      throw new Error("step06 expected real provider post id, but got mock_*");
     }
     if (completed.status === "failed" && !completed.publishResult) {
       throw new Error("failed without publish log record");
