@@ -7,7 +7,9 @@ type CreditsDepletedAlertInput = {
 
 export async function notifyCreditsDepleted(input: CreditsDepletedAlertInput): Promise<void> {
   const webhookUrl = process.env.OPS_ALERT_WEBHOOK_URL;
+  const text = `[ALERT] X API credits depleted (brand=${input.brandId}, post=${input.scheduledPostId})`;
   const payload = {
+    text,
     event: "credits_depleted",
     provider: input.provider,
     errorCode: input.errorCode,
@@ -41,4 +43,3 @@ export async function notifyCreditsDepleted(input: CreditsDepletedAlertInput): P
     console.error("[ops-alert] webhook error", { message: err?.message ?? "unknown_error" });
   }
 }
-

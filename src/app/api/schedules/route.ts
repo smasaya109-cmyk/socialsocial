@@ -10,6 +10,7 @@ import { redactBody } from "@/lib/logging/redaction";
 const schema = z.object({
   brandId: z.string().uuid(),
   connectionId: z.string().uuid(),
+  assetId: z.string().uuid().optional(),
   body: z.string().min(1).max(5000),
   scheduledAt: z.string().datetime(),
   safeModeEnabled: z.boolean().default(true)
@@ -27,6 +28,33 @@ export async function POST(request: Request) {
     const supabase = getSupabaseUserClient(accessToken);
 
     await assertBrandMemberOrNotFound({ supabase, brandId: input.brandId });
+    const { data: connection, error: connectionError } = await supabase
+      .from("social_connections")
+      .select("id,provider")
+      .eq("id", input.connectionId)
+      .eq("brand_id", input.brandId)
+      .maybeSingle();
+
+    if (connectionError || !connection) {
+      return NextResponse.json({ error: "Connection not found" }, { status: 404 });
+    }
+
+    if (input.assetId) {
+      const { data: asset, error: assetError } = await supabase
+        .from("media_assets")
+        .select("id,status")
+        .eq("id", input.assetId)
+        .eq("brand_id", input.brandId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (assetError || !asset || asset.status !== "uploaded") {
+        return NextResponse.json({ error: "Asset not found" }, { status: 404 });
+      }
+    }
+
+    if (connection.provider === "instagram" && !input.assetId) {
+      return NextResponse.json({ error: "Instagram requires assetId" }, { status: 400 });
+    }
 
     const { data: post, error: postError } = await supabase
       .from("scheduled_posts")
@@ -34,6 +62,7 @@ export async function POST(request: Request) {
         brand_id: input.brandId,
         created_by: userId,
         connection_id: input.connectionId,
+        asset_id: input.assetId ?? null,
         body: input.body,
         body_preview: redactBody(input.body),
         scheduled_at: input.scheduledAt,

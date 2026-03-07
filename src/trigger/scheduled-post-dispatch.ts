@@ -1,9 +1,10 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
+import { createPresignedGetUrl } from "@/lib/assets/r2";
 import { acquireIdempotencyLock } from "@/lib/idempotency/lock";
 import { redactBody, redactToken } from "@/lib/logging/redaction";
 import { resolveProviderClient } from "@/lib/providers";
 import { isSafeModeDuplicate } from "@/lib/safe-mode/similarity";
-import { decryptSecret } from "@/lib/security/encryption";
+import { decryptSecret, encryptSecret } from "@/lib/security/encryption";
 
 type DispatchPayload = {
   scheduledPostId: string;
@@ -23,6 +24,25 @@ function snippet(text: string): string {
   return redactBody(text).slice(0, 140);
 }
 
+function buildTokenPatch(input: {
+  rotatedAccessToken?: string;
+  rotatedRefreshToken?: string | null;
+  rotatedExpiresIn?: number;
+}) {
+  if (!input.rotatedAccessToken) return undefined;
+  const access = encryptSecret(input.rotatedAccessToken);
+  const refresh = input.rotatedRefreshToken ? encryptSecret(input.rotatedRefreshToken) : null;
+  return {
+    accessTokenEnc: access.encrypted,
+    refreshTokenEnc: refresh?.encrypted ?? null,
+    keyVersion: access.keyVersion,
+    tokenExpiresAt:
+      typeof input.rotatedExpiresIn === "number"
+        ? new Date(Date.now() + input.rotatedExpiresIn * 1000).toISOString()
+        : null
+  };
+}
+
 type ClaimResponse =
   | {
       claimed: true;
@@ -34,12 +54,21 @@ type ClaimResponse =
         body: string;
         safeModeEnabled: boolean;
         previousPostBody: string | null;
+        assetId: string | null;
       };
       connection: {
+        id: string;
         provider: "instagram" | "x" | "threads" | "tiktok";
+        providerAccountId: string;
         accessTokenEnc: string;
         refreshTokenEnc: string | null;
       };
+      asset: {
+        id: string;
+        objectKey: string;
+        mimeType: string;
+        kind: "video" | "image" | "thumbnail";
+      } | null;
     }
   | { claimed: false; reason: string };
 
@@ -99,6 +128,12 @@ export const scheduledPostDispatch = task({
       errorCode?: string;
       providerPostId?: string;
       providerResponseMasked?: string;
+      tokenPatch?: {
+        accessTokenEnc: string;
+        refreshTokenEnc?: string | null;
+        keyVersion: number;
+        tokenExpiresAt?: string | null;
+      };
     }) => {
       const completeResponse = await fetch(`${baseUrl}/api/internal/post/complete`, {
         method: "POST",
@@ -113,7 +148,9 @@ export const scheduledPostDispatch = task({
           idempotencyKey: claimed.post.idempotencyKey,
           errorCode: input.errorCode,
           providerPostId: input.providerPostId,
-          providerResponseMasked: input.providerResponseMasked
+          providerResponseMasked: input.providerResponseMasked,
+          connectionId: claimed.connection.id,
+          tokenPatch: input.tokenPatch
         })
       });
       if (!completeResponse.ok) {
@@ -178,10 +215,31 @@ export const scheduledPostDispatch = task({
 
     if (stubMode === "off") {
       const providerClient = resolveProviderClient(claimed.connection.provider);
+      const refreshToken = claimed.connection.refreshTokenEnc
+        ? decryptSecret(claimed.connection.refreshTokenEnc)
+        : null;
+      let mediaUrl: string | undefined;
+      if (claimed.asset) {
+        try {
+          mediaUrl = (await createPresignedGetUrl(claimed.asset.objectKey)).url;
+        } catch {
+          await complete({
+            result: "failed",
+            errorCode: "ASSET_URL_SIGN_FAILED",
+            providerResponseMasked: "asset_url_sign_failed"
+          });
+          return { ok: false, scheduledPostId: claimed.post.id };
+        }
+      }
       const result = await providerClient.publish({
         provider: claimed.connection.provider,
+        providerAccountId: claimed.connection.providerAccountId,
         accessToken,
-        body: claimed.post.body
+        refreshToken,
+        body: claimed.post.body,
+        mediaUrl,
+        mediaMimeType: claimed.asset?.mimeType,
+        mediaKind: claimed.asset?.kind
       });
       logger.info("Provider client result", {
         scheduledPostId: claimed.post.id,
@@ -193,17 +251,21 @@ export const scheduledPostDispatch = task({
           : null
       });
       if (!result.ok) {
+        const tokenPatch = claimed.connection.provider === "x" ? buildTokenPatch(result) : undefined;
         await complete({
           result: "failed",
           errorCode: result.errorCode ?? "PROVIDER_CLIENT_ERROR",
-          providerResponseMasked: result.providerResponseMasked ?? "provider-client-failed"
+          providerResponseMasked: result.providerResponseMasked ?? "provider-client-failed",
+          tokenPatch
         });
         return { ok: false, scheduledPostId: claimed.post.id };
       }
+      const tokenPatch = claimed.connection.provider === "x" ? buildTokenPatch(result) : undefined;
       await complete({
         result: "published",
         providerPostId: result.providerPostId,
-        providerResponseMasked: result.providerResponseMasked ?? "provider-client-success"
+        providerResponseMasked: result.providerResponseMasked ?? "provider-client-success",
+        tokenPatch
       });
       return { ok: true, scheduledPostId: claimed.post.id };
     }

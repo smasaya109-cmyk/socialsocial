@@ -25,7 +25,7 @@ export async function PATCH(request: Request, context: { params: { id: string } 
     const scheduledPostId = context.params.id;
     const { data: post, error: postError } = await supabase
       .from("scheduled_posts")
-      .select("id,brand_id,status,trigger_run_id,connection_id,body,safe_mode_enabled")
+      .select("id,brand_id,status,trigger_run_id,connection_id,asset_id,body,safe_mode_enabled")
       .eq("id", scheduledPostId)
       .maybeSingle();
 
@@ -63,6 +63,7 @@ export async function PATCH(request: Request, context: { params: { id: string } 
           brand_id: post.brand_id,
           created_by: userId,
           connection_id: post.connection_id,
+          asset_id: post.asset_id ?? null,
           body: post.body,
           body_preview: redactBody(post.body),
           scheduled_at: scheduledAt,
@@ -161,7 +162,7 @@ export async function GET(request: Request, context: { params: { id: string } })
 
     const { data: post, error } = await supabase
       .from("scheduled_posts")
-      .select("id,brand_id,scheduled_at,status,error_code,trigger_run_id,posted_at,created_at")
+      .select("id,brand_id,asset_id,scheduled_at,status,error_code,trigger_run_id,posted_at,created_at")
       .eq("id", scheduledPostId)
       .maybeSingle();
 

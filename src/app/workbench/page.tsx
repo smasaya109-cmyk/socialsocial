@@ -10,7 +10,7 @@ type Brand = {
 
 type Connection = {
   id: string;
-  provider: string;
+  provider: "x" | "instagram" | "threads" | "tiktok";
   provider_account_id: string;
   created_at: string;
 };
@@ -40,6 +40,17 @@ type ScheduleResponse = {
 
 const BASE_URL = "";
 
+function formatApiError(input: unknown, fallback: string): string {
+  if (!input) return fallback;
+  if (typeof input === "string") return input;
+  try {
+    const serialized = JSON.stringify(input);
+    return serialized.length > 280 ? `${serialized.slice(0, 280)}...` : serialized;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function WorkbenchPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -49,6 +60,8 @@ export default function WorkbenchPage() {
   const [brandId, setBrandId] = useState("");
   const [connections, setConnections] = useState<Connection[]>([]);
   const [connectionId, setConnectionId] = useState("");
+  const [assetId, setAssetId] = useState("");
+  const [provider, setProvider] = useState<"x" | "instagram" | "threads">("x");
   const [postBody, setPostBody] = useState(`workbench post ${new Date().toISOString()}`);
   const [scheduledPostId, setScheduledPostId] = useState("");
   const [statusLog, setStatusLog] = useState<string[]>([]);
@@ -84,7 +97,11 @@ export default function WorkbenchPage() {
       });
       const json = await response.json();
       if (!response.ok || !json.access_token) {
-        throw new Error(json.error_description || json.error || `login failed: ${response.status}`);
+        throw new Error(
+          json.error_description ||
+            formatApiError(json.error, "") ||
+            `login failed: ${response.status}`
+        );
       }
       setToken(json.access_token);
       pushLog("login succeeded");
@@ -106,7 +123,7 @@ export default function WorkbenchPage() {
       });
       const json = await response.json();
       if (!response.ok || !json.brand?.id) {
-        throw new Error(json.error || `create brand failed: ${response.status}`);
+        throw new Error(formatApiError(json.error, `create brand failed: ${response.status}`));
       }
       setBrandId(json.brand.id);
       pushLog(`brand created: ${json.brand.id}`);
@@ -118,23 +135,23 @@ export default function WorkbenchPage() {
     }
   }
 
-  async function startXConnect() {
+  async function startProviderConnect() {
     if (!hasAuth || !brandId) return;
     setBusy(true);
     try {
-      const response = await fetch(`${BASE_URL}/api/auth/x/start`, {
+      const response = await fetch(`${BASE_URL}/api/auth/${provider}/start`, {
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify({ brandId })
       });
       const json = await response.json();
       if (!response.ok || !json.authorizeUrl) {
-        throw new Error(json.error || `x start failed: ${response.status}`);
+        throw new Error(formatApiError(json.error, `${provider} start failed: ${response.status}`));
       }
       window.open(json.authorizeUrl, "_blank", "noopener,noreferrer");
-      pushLog("opened X authorize URL in new tab");
+      pushLog(`opened ${provider} authorize URL in new tab`);
     } catch (error) {
-      pushLog(`x connect start failed: ${error instanceof Error ? error.message : "unknown"}`);
+      pushLog(`${provider} connect start failed: ${error instanceof Error ? error.message : "unknown"}`);
     } finally {
       setBusy(false);
     }
@@ -153,7 +170,7 @@ export default function WorkbenchPage() {
       const query = new URLSearchParams({
         select: "id,provider,provider_account_id,created_at",
         brand_id: `eq.${targetBrandId}`,
-        provider: "eq.x",
+        provider: `eq.${provider}`,
         order: "created_at.desc"
       });
       const response = await fetch(`${supabaseUrl}/rest/v1/social_connections?${query.toString()}`, {
@@ -169,9 +186,9 @@ export default function WorkbenchPage() {
       setConnections(json);
       if (json[0]?.id) {
         setConnectionId(json[0].id);
-        pushLog(`loaded x connections: ${json.length}, latest=${json[0].id}`);
+        pushLog(`loaded ${provider} connections: ${json.length}, latest=${json[0].id}`);
       } else {
-        pushLog("loaded x connections: 0 (connect X first)");
+        pushLog(`loaded ${provider} connections: 0 (connect ${provider} first)`);
       }
     } catch (error) {
       pushLog(`load connections failed: ${error instanceof Error ? error.message : "unknown"}`);
@@ -191,6 +208,7 @@ export default function WorkbenchPage() {
         body: JSON.stringify({
           brandId,
           connectionId,
+          assetId: assetId || undefined,
           body: `${postBody} ${Math.random().toString(36).slice(2, 7)}`,
           scheduledAt,
           safeModeEnabled: false
@@ -198,7 +216,7 @@ export default function WorkbenchPage() {
       });
       const json = await response.json();
       if (!response.ok || !json.scheduledPost?.id) {
-        throw new Error(json.error || `create schedule failed: ${response.status}`);
+        throw new Error(formatApiError(json.error, `create schedule failed: ${response.status}`));
       }
       setScheduledPostId(json.scheduledPost.id);
       pushLog(`schedule created: ${json.scheduledPost.id}`);
@@ -218,7 +236,7 @@ export default function WorkbenchPage() {
       });
       const json = (await response.json()) as ScheduleResponse;
       if (!response.ok || !json.scheduledPost) {
-        throw new Error(json.error || `check schedule failed: ${response.status}`);
+        throw new Error(formatApiError(json.error, `check schedule failed: ${response.status}`));
       }
       pushLog(
         `status=${json.scheduledPost.status} error=${json.scheduledPost.error_code ?? "-"} providerPostId=${
@@ -246,7 +264,11 @@ export default function WorkbenchPage() {
       });
       const json = await response.json();
       if (!response.ok || !json.newScheduledPostId) {
-        throw new Error(json.error || json.reason || `retry failed: ${response.status}`);
+        throw new Error(
+          formatApiError(json.error, "") ||
+            formatApiError(json.reason, "") ||
+            `retry failed: ${response.status}`
+        );
       }
       setScheduledPostId(json.newScheduledPostId);
       pushLog(`retry enqueued: ${json.newScheduledPostId}`);
@@ -260,8 +282,8 @@ export default function WorkbenchPage() {
   return (
     <main>
       <section className="hero">
-        <h1>X予約投稿 Workbench</h1>
-        <p>ログイン後、Brand作成→X連携→予約投稿→状態確認をこの画面で実行できます。</p>
+        <h1>X / Instagram / Threads Workbench</h1>
+        <p>ログイン後、Brand作成→SNS連携→予約投稿→状態確認をこの画面で実行できます。</p>
       </section>
 
       <section className="card-grid">
@@ -300,12 +322,17 @@ export default function WorkbenchPage() {
         </article>
 
         <article className="card">
-          <h3>3) Connect X</h3>
-          <button className="btn wb-btn" disabled={busy || !hasAuth || !brandId} onClick={startXConnect}>
-            Start X OAuth
+          <h3>3) Connect Provider</h3>
+          <select className="wb-input" value={provider} onChange={(e) => setProvider(e.target.value as "x" | "instagram" | "threads")}>
+            <option value="x">X</option>
+            <option value="instagram">Instagram</option>
+            <option value="threads">Threads</option>
+          </select>
+          <button className="btn wb-btn" disabled={busy || !hasAuth || !brandId} onClick={startProviderConnect}>
+            Start {provider} OAuth
           </button>
           <button className="btn wb-btn" disabled={busy || !hasAuth || !brandId} onClick={() => loadConnections()}>
-            Reload X Connections
+            Reload {provider} Connections
           </button>
           <input
             className="wb-input"
@@ -334,6 +361,12 @@ export default function WorkbenchPage() {
             value={scheduledPostId}
             onChange={(e) => setScheduledPostId(e.target.value)}
           />
+          <input
+            className="wb-input"
+            placeholder="asset id (required for instagram)"
+            value={assetId}
+            onChange={(e) => setAssetId(e.target.value)}
+          />
           <div className="cta-row">
             <button className="btn wb-btn" disabled={busy || !scheduledPostId || !hasAuth} onClick={checkSchedule}>
               Check Status
@@ -359,4 +392,3 @@ export default function WorkbenchPage() {
     </main>
   );
 }
-

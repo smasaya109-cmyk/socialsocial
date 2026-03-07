@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "smoke:step05": "node scripts/smoke-step05.mjs",
     "smoke:step06:x": "node scripts/smoke-step06-x.mjs",
-    "smoke:help": "node -e \"console.log('Required: BASE_URL. Auth: either A_EMAIL/A_PASSWORD/B_EMAIL/B_PASSWORD + SUPABASE_URL/SUPABASE_ANON_KEY, or SMOKE_A_TOKEN/SMOKE_B_TOKEN. Optional: INTERNAL_API_KEY, SMOKE_WAIT_MS, SMOKE_POLL_MS')\""
+    "smoke:step06:meta": "node scripts/smoke-step06-meta.mjs",
+    "smoke:help": "node -e \"console.log('Required: BASE_URL. Auth: either A_EMAIL/A_PASSWORD/B_EMAIL/B_PASSWORD + SUPABASE_URL/SUPABASE_ANON_KEY, or SMOKE_A_TOKEN/SMOKE_B_TOKEN. Step06 x: optional CONNECTION_ID/BRAND_ID. Step06 meta: required PROVIDER=instagram|threads, CONNECTION_ID, ASSET_ID, and BRAND_ID if reusing existing brand. Optional: SMOKE_WAIT_MS, SMOKE_POLL_MS')\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.994.0",

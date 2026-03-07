@@ -1,12 +1,224 @@
 import type { ProviderClient, ProviderPublishInput, ProviderPublishResult } from "@/lib/providers/types";
 
+const REQUEST_TIMEOUT_MS = 20_000;
+
+type MetaErrorPayload = {
+  error?: {
+    message?: string;
+    code?: number;
+    error_subcode?: number;
+    type?: string;
+  };
+};
+
+function maskSnippet(text: string): string {
+  return text
+    .replace(/https?:\/\/[^\s]+/g, "[redacted-url]")
+    .replace(/\s+/g, " ")
+    .slice(0, 240);
+}
+
+function parseMetaError(raw: string): MetaErrorPayload | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as MetaErrorPayload;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function classifyThreadsError(status: number, payload: MetaErrorPayload | null): string {
+  const code = payload?.error?.code;
+  const message = (payload?.error?.message || "").toLowerCase();
+
+  if (status === 401 || code === 190) return "THREADS_UNAUTHORIZED";
+  if (status === 403 || code === 10 || message.includes("permission")) return "THREADS_SCOPE_MISSING";
+  if (status === 429 || code === 4 || code === 17) return "THREADS_RATE_LIMIT";
+  if (status >= 500) return "THREADS_PROVIDER_UNAVAILABLE";
+  if (status === 400 && message.includes("video")) return "THREADS_VIDEO_INVALID";
+  if (status === 400 && message.includes("image")) return "THREADS_IMAGE_INVALID";
+  if (status === 400 && message.includes("text")) return "THREADS_BAD_REQUEST";
+  return "THREADS_PROVIDER_ERROR";
+}
+
+async function readText(response: Response): Promise<string> {
+  try {
+    return await response.text();
+  } catch {
+    return "";
+  }
+}
+
+async function createContainer(input: {
+  apiBase: string;
+  accountId: string;
+  accessToken: string;
+  text: string;
+  mediaUrl?: string;
+  mediaKind?: "video" | "image" | "thumbnail";
+  signal: AbortSignal;
+}): Promise<{ ok: true; creationId: string } | { ok: false; status: number; raw: string }> {
+  const url = `${input.apiBase}/${input.accountId}/threads`;
+  const body = new URLSearchParams({
+    text: input.text,
+    access_token: input.accessToken
+  });
+
+  if (input.mediaUrl && input.mediaKind === "video") {
+    body.set("media_type", "VIDEO");
+    body.set("video_url", input.mediaUrl);
+  } else if (input.mediaUrl) {
+    body.set("media_type", "IMAGE");
+    body.set("image_url", input.mediaUrl);
+  } else {
+    body.set("media_type", "TEXT");
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+    signal: input.signal
+  });
+
+  const raw = await readText(response);
+  if (!response.ok) {
+    return { ok: false, status: response.status, raw };
+  }
+
+  let json: unknown = null;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    json = null;
+  }
+
+  const creationId =
+    json && typeof json === "object" && "id" in json ? String((json as { id?: string }).id || "") : "";
+
+  if (!creationId) {
+    return { ok: false, status: 502, raw: "threads_create_missing_id" };
+  }
+  return { ok: true, creationId };
+}
+
+async function publishContainer(input: {
+  apiBase: string;
+  accountId: string;
+  accessToken: string;
+  creationId: string;
+  signal: AbortSignal;
+}): Promise<{ ok: true; providerPostId: string } | { ok: false; status: number; raw: string }> {
+  const url = `${input.apiBase}/${input.accountId}/threads_publish`;
+  const body = new URLSearchParams({
+    creation_id: input.creationId,
+    access_token: input.accessToken
+  });
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+    signal: input.signal
+  });
+
+  const raw = await readText(response);
+  if (!response.ok) {
+    return { ok: false, status: response.status, raw };
+  }
+
+  let json: unknown = null;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    json = null;
+  }
+
+  const providerPostId =
+    json && typeof json === "object" && "id" in json ? String((json as { id?: string }).id || "") : "";
+
+  if (!providerPostId) {
+    return { ok: false, status: 502, raw: "threads_publish_missing_id" };
+  }
+
+  return { ok: true, providerPostId };
+}
+
 export class ThreadsProviderClient implements ProviderClient {
   async publish(input: ProviderPublishInput): Promise<ProviderPublishResult> {
-    void input;
-    return {
-      ok: false,
-      errorCode: "THREADS_NOT_IMPLEMENTED",
-      providerResponseMasked: "threads_client_not_implemented"
-    };
+    const apiBase = (process.env.THREADS_API_BASE_URL || "https://graph.threads.net/v1.0").replace(/\/$/, "");
+    const accountId = input.providerAccountId || process.env.THREADS_PROVIDER_ACCOUNT_ID || "";
+
+    if (!accountId) {
+      return {
+        ok: false,
+        errorCode: "THREADS_ACCOUNT_ID_MISSING",
+        providerResponseMasked: "threads_provider_account_id_missing"
+      };
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const created = await createContainer({
+        apiBase,
+        accountId,
+        accessToken: input.accessToken,
+        text: input.body,
+        mediaUrl: input.mediaUrl,
+        mediaKind: input.mediaKind,
+        signal: controller.signal
+      });
+
+      if (!created.ok) {
+        const payload = parseMetaError(created.raw);
+        return {
+          ok: false,
+          errorCode: classifyThreadsError(created.status, payload),
+          providerResponseMasked: `create status=${created.status} body=${maskSnippet(payload?.error?.message || created.raw)}`
+        };
+      }
+
+      const published = await publishContainer({
+        apiBase,
+        accountId,
+        accessToken: input.accessToken,
+        creationId: created.creationId,
+        signal: controller.signal
+      });
+
+      if (!published.ok) {
+        const payload = parseMetaError(published.raw);
+        return {
+          ok: false,
+          errorCode: classifyThreadsError(published.status, payload),
+          providerResponseMasked: `publish status=${published.status} body=${maskSnippet(payload?.error?.message || published.raw)}`
+        };
+      }
+
+      return {
+        ok: true,
+        providerPostId: published.providerPostId,
+        providerResponseMasked: "status=200"
+      };
+    } catch (error) {
+      const err = error as { name?: string; message?: string } | undefined;
+      if (err?.name === "AbortError") {
+        return {
+          ok: false,
+          errorCode: "THREADS_TIMEOUT",
+          providerResponseMasked: "request_timeout"
+        };
+      }
+      return {
+        ok: false,
+        errorCode: "THREADS_NETWORK_ERROR",
+        providerResponseMasked: `network_error:${maskSnippet(err?.message || "")}`
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }

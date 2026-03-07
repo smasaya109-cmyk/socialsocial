@@ -16,7 +16,16 @@ const schema = z.object({
   idempotencyKey: z.string().uuid(),
   providerPostId: z.string().optional(),
   providerResponseMasked: z.string().optional(),
-  errorCode: z.string().optional()
+  errorCode: z.string().optional(),
+  connectionId: z.string().uuid().optional(),
+  tokenPatch: z
+    .object({
+      accessTokenEnc: z.string().min(1),
+      refreshTokenEnc: z.string().nullable().optional(),
+      keyVersion: z.number().int().positive(),
+      tokenExpiresAt: z.string().datetime().nullable().optional()
+    })
+    .optional()
 });
 
 export async function POST(request: Request) {
@@ -92,6 +101,26 @@ export async function POST(request: Request) {
 
     if (statusError || !changedRows || changedRows.length === 0) {
       return NextResponse.json({ ok: false, reason: "cas_failed" }, { status: 200 });
+    }
+
+    if (input.connectionId && input.tokenPatch) {
+      const { error: tokenUpdateError } = await supabase
+        .from("social_connections")
+        .update({
+          access_token_enc: input.tokenPatch.accessTokenEnc,
+          refresh_token_enc: input.tokenPatch.refreshTokenEnc ?? null,
+          key_version: input.tokenPatch.keyVersion,
+          token_expires_at: input.tokenPatch.tokenExpiresAt ?? null,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", input.connectionId)
+        .eq("brand_id", post.brand_id);
+      if (tokenUpdateError) {
+        console.error("[api.internal.post.complete] token update failed", {
+          code: tokenUpdateError.code ?? null,
+          message: tokenUpdateError.message ?? "token_update_failed"
+        });
+      }
     }
 
     if (input.result === "failed" && input.errorCode === "X_CREDITS_DEPLETED") {

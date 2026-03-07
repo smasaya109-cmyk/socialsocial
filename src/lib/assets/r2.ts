@@ -8,8 +8,20 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-const UPLOAD_URL_TTL_SECONDS = 600;
-const DOWNLOAD_URL_TTL_SECONDS = 600;
+const DEFAULT_UPLOAD_URL_TTL_SECONDS = 600;
+const DEFAULT_DOWNLOAD_URL_TTL_SECONDS = 600;
+
+function getUploadUrlTtlSeconds(): number {
+  const raw = Number(process.env.R2_UPLOAD_URL_TTL_SECONDS ?? DEFAULT_UPLOAD_URL_TTL_SECONDS);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_UPLOAD_URL_TTL_SECONDS;
+  return Math.min(Math.floor(raw), 7 * 24 * 60 * 60);
+}
+
+function getDownloadUrlTtlSeconds(): number {
+  const raw = Number(process.env.R2_DOWNLOAD_URL_TTL_SECONDS ?? DEFAULT_DOWNLOAD_URL_TTL_SECONDS);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_DOWNLOAD_URL_TTL_SECONDS;
+  return Math.min(Math.floor(raw), 7 * 24 * 60 * 60);
+}
 
 function getR2Client(): S3Client {
   const endpoint = process.env.R2_ENDPOINT;
@@ -39,20 +51,22 @@ export async function createPresignedPutUrl(input: {
   mimeType: string;
 }): Promise<{ url: string; expiresIn: number }> {
   const client = getR2Client();
+  const expiresIn = getUploadUrlTtlSeconds();
   const command = new PutObjectCommand({
     Bucket: getBucket(),
     Key: input.objectKey,
     ContentType: input.mimeType
   });
-  const url = await getSignedUrl(client, command, { expiresIn: UPLOAD_URL_TTL_SECONDS });
-  return { url, expiresIn: UPLOAD_URL_TTL_SECONDS };
+  const url = await getSignedUrl(client, command, { expiresIn });
+  return { url, expiresIn };
 }
 
 export async function createPresignedGetUrl(objectKey: string): Promise<{ url: string; expiresIn: number }> {
   const client = getR2Client();
+  const expiresIn = getDownloadUrlTtlSeconds();
   const command = new GetObjectCommand({ Bucket: getBucket(), Key: objectKey });
-  const url = await getSignedUrl(client, command, { expiresIn: DOWNLOAD_URL_TTL_SECONDS });
-  return { url, expiresIn: DOWNLOAD_URL_TTL_SECONDS };
+  const url = await getSignedUrl(client, command, { expiresIn });
+  return { url, expiresIn };
 }
 
 export async function headObject(objectKey: string) {
