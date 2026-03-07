@@ -187,7 +187,10 @@ export const scheduledPostDispatch = task({
         scheduledPostId: claimed.post.id,
         provider: claimed.connection.provider,
         ok: result.ok,
-        errorCode: result.errorCode ?? null
+        errorCode: result.errorCode ?? null,
+        providerResponseMasked: result.providerResponseMasked
+          ? redactBody(result.providerResponseMasked)
+          : null
       });
       if (!result.ok) {
         await complete({

@@ -67,6 +67,10 @@ function extractXErrorText(payload: XErrorPayload | null): string {
 function classifyXError(status: number, payload: XErrorPayload | null): string {
   const text = extractXErrorText(payload);
 
+  if (status === 402) {
+    if (text.includes("credit") || text.includes("credits")) return "X_CREDITS_DEPLETED";
+    return "X_PAYMENT_REQUIRED";
+  }
   if (status === 401) return "X_UNAUTHORIZED";
   if (status === 403) {
     if (text.includes("scope") || text.includes("permission")) return "X_SCOPE_MISSING";
