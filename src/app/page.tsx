@@ -16,6 +16,9 @@ export default function HomePage() {
           を連携し、投稿予約から自動配信までを一つの画面で管理するWebアプリです。
         </p>
         <div className="cta-row">
+          <a href="/workbench" className="btn primary">
+            Workbench（実操作）
+          </a>
           <Link href="/contact" className="btn primary">
             導入相談（Coming soon）
           </Link>

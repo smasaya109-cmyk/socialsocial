@@ -138,3 +138,38 @@ li {
   color: #64748b;
   margin: 0;
 }
+
+.wb-input {
+  width: 100%;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font: inherit;
+  background: #fff;
+}
+
+.wb-btn {
+  cursor: pointer;
+  margin-top: 6px;
+  width: 100%;
+  background: #fff;
+}
+
+.wb-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.wb-log {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.wb-log-line {
+  margin: 0;
+  padding: 6px 0;
+  border-bottom: 1px solid #eef2f7;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+}

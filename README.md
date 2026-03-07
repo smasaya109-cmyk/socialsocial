@@ -113,6 +113,15 @@ Step6 着手（初期）:
   - `X_OAUTH_REDIRECT_URI` (X consoleに登録したcallbackと完全一致)
   - optional: `X_OAUTH_SCOPE`
 
+## Operations: Credits / Retry
+- `GET /api/schedules/:id` は `errorMeta` を返します。
+  - 例: `X_CREDITS_DEPLETED` の場合、ユーザー向け説明と `retryable` が取得可能。
+- `PATCH /api/schedules/:id` で再送:
+  - body: `{ "action": "retry" }`
+  - 任意で `scheduledAt` を指定可能。
+  - 失敗投稿(`status=failed`)から新規予約を作成して再enqueueします。
+- `OPS_ALERT_WEBHOOK_URL` を設定すると、`X_CREDITS_DEPLETED` 発生時に運用通知を送ります。
+
 ## Step docs
 - `docs/steps/step-01-foundation.md`
 - `docs/steps/step-02-auth-rls.md`

@@ -64,3 +64,6 @@
 - OAuth connect automation:
   - `POST /api/auth/x/start` to generate state/PKCE and authorize URL
   - `GET /api/auth/x/callback` to exchange code and persist encrypted tokens
+  - `GET /api/schedules/:id` now includes `errorMeta` for UI-safe user messaging
+  - `PATCH /api/schedules/:id` supports `{ action: "retry" }` for failed posts
+  - `OPS_ALERT_WEBHOOK_URL` notification on `X_CREDITS_DEPLETED`

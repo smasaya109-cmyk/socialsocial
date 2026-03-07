@@ -7,6 +7,7 @@ import {
   InternalAuthError
 } from "@/lib/internal/require-internal-auth";
 import { redactBody } from "@/lib/logging/redaction";
+import { notifyCreditsDepleted } from "@/lib/notifications/ops-alert";
 
 const schema = z.object({
   postId: z.string().uuid(),
@@ -91,6 +92,15 @@ export async function POST(request: Request) {
 
     if (statusError || !changedRows || changedRows.length === 0) {
       return NextResponse.json({ ok: false, reason: "cas_failed" }, { status: 200 });
+    }
+
+    if (input.result === "failed" && input.errorCode === "X_CREDITS_DEPLETED") {
+      await notifyCreditsDepleted({
+        brandId: post.brand_id,
+        scheduledPostId: post.id,
+        provider: input.provider,
+        errorCode: input.errorCode
+      });
     }
 
     return NextResponse.json({ ok: true });
