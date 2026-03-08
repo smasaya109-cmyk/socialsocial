@@ -415,6 +415,28 @@ li {
   gap: 10px;
 }
 
+.wb-column-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.wb-tab {
+  border: 1px solid #d2ddea;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.wb-tab.active {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0f172a;
+}
+
 .wb-filter {
   width: 120px;
   margin: 0;
@@ -433,6 +455,11 @@ li {
   border-radius: 10px;
   padding: 9px;
   background: #fff;
+  cursor: grab;
+}
+
+.wb-queue-item:active {
+  cursor: grabbing;
 }
 
 .wb-queue-item.tone-good {
@@ -454,6 +481,15 @@ li {
   margin: 0 0 4px;
   font-size: 12px;
   line-height: 1.4;
+}
+
+.wb-queue-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--muted);
 }
 
 .wb-week {
@@ -551,6 +587,13 @@ li {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+}
+
+.wb-bulk-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 @media (max-width: 1180px) {

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 type Provider = "x" | "instagram" | "threads";
 type QueueStatus = "scheduled" | "queued" | "processing" | "posted" | "failed" | "canceled";
 type CalendarView = "week" | "month";
+type ColumnView = "queue" | "sent" | "failed";
 
 type Brand = {
   id: string;
@@ -65,7 +66,7 @@ type ScheduleResponse = {
 };
 
 const BASE_URL = "";
-const DRAFTS_STORAGE_KEY = "wb-drafts-v1";
+const DRAFTS_STORAGE_KEY = "wb-drafts-v2";
 
 function formatApiError(input: unknown, fallback: string): string {
   if (!input) return fallback;
@@ -156,6 +157,19 @@ function fileKind(mimeType: string): "video" | "image" | "thumbnail" {
   return "thumbnail";
 }
 
+function mergeDateWithTime(targetDay: Date, sourceDateTime: string): string {
+  const source = new Date(sourceDateTime);
+  const merged = new Date(targetDay);
+  merged.setHours(source.getHours(), source.getMinutes(), 0, 0);
+  return merged.toISOString();
+}
+
+function matchesColumn(item: QueueItem, column: ColumnView): boolean {
+  if (column === "queue") return ["scheduled", "queued", "processing"].includes(item.status);
+  if (column === "sent") return item.status === "posted";
+  return ["failed", "canceled"].includes(item.status);
+}
+
 export default function WorkbenchPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -182,6 +196,8 @@ export default function WorkbenchPage() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [focusedScheduleId, setFocusedScheduleId] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | QueueStatus>("all");
+  const [columnView, setColumnView] = useState<ColumnView>("queue");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [calendarView, setCalendarView] = useState<CalendarView>("week");
   const [calendarBase, setCalendarBase] = useState<Date>(new Date());
@@ -202,22 +218,35 @@ export default function WorkbenchPage() {
       if (!raw) return;
       const parsed = JSON.parse(raw) as Draft[];
       if (!Array.isArray(parsed)) return;
-      setDrafts(parsed.slice(0, 20));
+      setDrafts(parsed.slice(0, 30));
     } catch {
-      // ignore storage parse error
+      // ignore
     }
   }, []);
 
   useEffect(() => {
     try {
-      localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(drafts.slice(0, 20)));
+      localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(drafts.slice(0, 30)));
     } catch {
-      // ignore storage write error
+      // ignore
     }
   }, [drafts]);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isMetaEnter = (event.metaKey || event.ctrlKey) && event.key === "Enter";
+      if (!isMetaEnter) return;
+      event.preventDefault();
+      void createSchedule();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
   const queueFiltered = useMemo(() => {
     let sorted = [...queue].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+    sorted = sorted.filter((item) => matchesColumn(item, columnView));
+
     if (statusFilter !== "all") {
       sorted = sorted.filter((item) => item.status === statusFilter);
     }
@@ -226,7 +255,7 @@ export default function WorkbenchPage() {
       sorted = sorted.filter((item) => isSameDay(new Date(item.scheduled_at), day));
     }
     return sorted;
-  }, [queue, statusFilter, selectedDate]);
+  }, [queue, statusFilter, selectedDate, columnView]);
 
   const queueStats = useMemo(() => {
     return {
@@ -234,16 +263,36 @@ export default function WorkbenchPage() {
       queued: queue.filter((x) => x.status === "queued" || x.status === "scheduled").length,
       processing: queue.filter((x) => x.status === "processing").length,
       posted: queue.filter((x) => x.status === "posted").length,
-      failed: queue.filter((x) => x.status === "failed").length
+      failed: queue.filter((x) => x.status === "failed" || x.status === "canceled").length
     };
   }, [queue]);
 
   const week = useMemo(() => weekDays(calendarBase), [calendarBase]);
   const month = useMemo(() => monthGrid(calendarBase), [calendarBase]);
+  const calendarDays = calendarView === "week" ? week : month;
 
   const pushLog = (line: string) => {
-    setStatusLog((prev) => [`${new Date().toLocaleTimeString()} ${line}`, ...prev].slice(0, 180));
+    setStatusLog((prev) => [`${new Date().toLocaleTimeString()} ${line}`, ...prev].slice(0, 200));
   };
+
+  function clearSelection() {
+    setSelectedIds([]);
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function toggleAllVisible() {
+    const visibleIds = queueFiltered.map((item) => item.id);
+    if (visibleIds.length === 0) return;
+    const allSelected = visibleIds.every((id) => selectedIds.includes(id));
+    if (allSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  }
 
   async function login() {
     setBusy(true);
@@ -425,7 +474,9 @@ export default function WorkbenchPage() {
       });
       const finalizeJson = await finalizeResponse.json();
       if (!finalizeResponse.ok || !finalizeJson.ok) {
-        throw new Error(formatApiError(finalizeJson.error || finalizeJson.reason, `finalize failed: ${finalizeResponse.status}`));
+        throw new Error(
+          formatApiError(finalizeJson.error || finalizeJson.reason, `finalize failed: ${finalizeResponse.status}`)
+        );
       }
 
       pushLog(`asset uploaded: ${uploadUrlJson.assetId}`);
@@ -448,7 +499,7 @@ export default function WorkbenchPage() {
       select: "id,scheduled_at,status,error_code,connection_id,asset_id,created_at",
       brand_id: `eq.${targetBrandId}`,
       order: "scheduled_at.asc",
-      limit: "80"
+      limit: "100"
     });
 
     const response = await fetch(`${supabaseUrl}/rest/v1/scheduled_posts?${query.toString()}`, {
@@ -510,48 +561,111 @@ export default function WorkbenchPage() {
 
   async function checkSchedule(id: string) {
     if (!hasAuth || !id) return;
+    const response = await fetch(`${BASE_URL}/api/schedules/${id}`, { headers: authHeaders });
+    const json = (await response.json()) as ScheduleResponse;
+    if (!response.ok || !json.scheduledPost) {
+      throw new Error(formatApiError(json.error, `check schedule failed: ${response.status}`));
+    }
+
+    setFocusedScheduleId(id);
+    pushLog(
+      `schedule=${id.slice(0, 8)} status=${json.scheduledPost.status} error=${json.scheduledPost.error_code ?? "-"} providerPostId=${json.delivery?.provider_post_id ?? "-"}`
+    );
+    if (json.errorMeta) {
+      pushLog(`hint: ${json.errorMeta.title} / ${json.errorMeta.message}`);
+    }
+  }
+
+  async function retrySchedule(id: string, scheduledAt?: string) {
+    const response = await fetch(`${BASE_URL}/api/schedules/${id}`, {
+      method: "PATCH",
+      headers: authHeaders,
+      body: JSON.stringify({ action: "retry", scheduledAt })
+    });
+    const json = await response.json();
+    if (!response.ok || !json.newScheduledPostId) {
+      throw new Error(formatApiError(json.error || json.reason, `retry failed: ${response.status}`));
+    }
+
+    setFocusedScheduleId(json.newScheduledPostId);
+    pushLog(`retry queued: ${json.newScheduledPostId}`);
+  }
+
+  async function cancelSchedule(id: string) {
+    const response = await fetch(`${BASE_URL}/api/schedules/${id}`, {
+      method: "PATCH",
+      headers: authHeaders,
+      body: JSON.stringify({ action: "cancel" })
+    });
+    const json = await response.json();
+    if (!response.ok || !json.ok) {
+      throw new Error(formatApiError(json.error || json.reason, `cancel failed: ${response.status}`));
+    }
+
+    pushLog(`canceled: ${id}`);
+  }
+
+  async function reschedule(id: string, newDateIso: string) {
+    const response = await fetch(`${BASE_URL}/api/schedules/${id}`, {
+      method: "PATCH",
+      headers: authHeaders,
+      body: JSON.stringify({ action: "reschedule", scheduledAt: newDateIso })
+    });
+    const json = await response.json();
+    if (!response.ok || !json.ok) {
+      throw new Error(formatApiError(json.error || json.reason, `reschedule failed: ${response.status}`));
+    }
+
+    pushLog(`rescheduled: ${id.slice(0, 8)} -> ${dateLabel(newDateIso)}`);
+  }
+
+  async function bulkCheck() {
+    if (selectedIds.length === 0) return;
     setBusy(true);
     try {
-      const response = await fetch(`${BASE_URL}/api/schedules/${id}`, { headers: authHeaders });
-      const json = (await response.json()) as ScheduleResponse;
-      if (!response.ok || !json.scheduledPost) {
-        throw new Error(formatApiError(json.error, `check schedule failed: ${response.status}`));
-      }
-
-      setFocusedScheduleId(id);
-      pushLog(
-        `schedule=${id.slice(0, 8)} status=${json.scheduledPost.status} error=${json.scheduledPost.error_code ?? "-"} providerPostId=${json.delivery?.provider_post_id ?? "-"}`
-      );
-      if (json.errorMeta) {
-        pushLog(`hint: ${json.errorMeta.title} / ${json.errorMeta.message}`);
+      for (const id of selectedIds) {
+        await checkSchedule(id);
       }
       await loadQueue();
     } catch (error) {
-      pushLog(`check failed: ${error instanceof Error ? error.message : "unknown"}`);
+      pushLog(`bulk check failed: ${error instanceof Error ? error.message : "unknown"}`);
     } finally {
       setBusy(false);
     }
   }
 
-  async function retrySchedule(id: string) {
-    if (!hasAuth || !id) return;
+  async function bulkRetryFailed() {
+    if (selectedIds.length === 0) return;
     setBusy(true);
     try {
-      const response = await fetch(`${BASE_URL}/api/schedules/${id}`, {
-        method: "PATCH",
-        headers: authHeaders,
-        body: JSON.stringify({ action: "retry" })
-      });
-      const json = await response.json();
-      if (!response.ok || !json.newScheduledPostId) {
-        throw new Error(formatApiError(json.error || json.reason, `retry failed: ${response.status}`));
+      const targets = queue.filter((item) => selectedIds.includes(item.id) && item.status === "failed");
+      for (const item of targets) {
+        await retrySchedule(item.id);
       }
-
-      setFocusedScheduleId(json.newScheduledPostId);
-      pushLog(`retry queued: ${json.newScheduledPostId}`);
+      clearSelection();
       await loadQueue();
     } catch (error) {
-      pushLog(`retry failed: ${error instanceof Error ? error.message : "unknown"}`);
+      pushLog(`bulk retry failed: ${error instanceof Error ? error.message : "unknown"}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function bulkCancelQueue() {
+    if (selectedIds.length === 0) return;
+    setBusy(true);
+    try {
+      const targets = queue.filter(
+        (item) =>
+          selectedIds.includes(item.id) && ["scheduled", "queued", "processing"].includes(item.status)
+      );
+      for (const item of targets) {
+        await cancelSchedule(item.id);
+      }
+      clearSelection();
+      await loadQueue();
+    } catch (error) {
+      pushLog(`bulk cancel failed: ${error instanceof Error ? error.message : "unknown"}`);
     } finally {
       setBusy(false);
     }
@@ -571,7 +685,7 @@ export default function WorkbenchPage() {
       assetId: assetId || undefined,
       updatedAt: new Date().toISOString()
     };
-    setDrafts((prev) => [draft, ...prev].slice(0, 20));
+    setDrafts((prev) => [draft, ...prev].slice(0, 30));
     pushLog(`draft saved: ${title}`);
   }
 
@@ -599,7 +713,26 @@ export default function WorkbenchPage() {
     });
   }
 
-  const calendarDays = calendarView === "week" ? week : month;
+  async function dropToCalendarDay(day: Date, postId: string) {
+    const source = queue.find((item) => item.id === postId);
+    if (!source) return;
+
+    setBusy(true);
+    try {
+      if (["scheduled", "queued", "processing"].includes(source.status)) {
+        await reschedule(postId, mergeDateWithTime(day, source.scheduled_at));
+      } else if (source.status === "failed") {
+        await retrySchedule(postId, mergeDateWithTime(day, source.scheduled_at));
+      } else {
+        pushLog(`drop ignored for status=${source.status}`);
+      }
+      await loadQueue();
+    } catch (error) {
+      pushLog(`drop reschedule failed: ${error instanceof Error ? error.message : "unknown"}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <main className="wb-app">
@@ -687,7 +820,6 @@ export default function WorkbenchPage() {
                 void uploadAsset(file);
               }}
             />
-            <button className="btn wb-btn" disabled={uploadingAsset || !hasAuth || !brandId} onClick={() => pushLog("Select a file to upload")}>Upload Asset</button>
             <select className="wb-input" value={assetId} onChange={(e) => setAssetId(e.target.value)}>
               <option value="">no asset</option>
               {assets.map((asset) => (
@@ -726,7 +858,7 @@ export default function WorkbenchPage() {
 
             <textarea className="wb-input wb-editor" rows={9} value={postBody} onChange={(e) => setPostBody(e.target.value)} placeholder="Write your post copy..." />
 
-            <p className="muted">{postBody.length} chars</p>
+            <p className="muted">{postBody.length} chars • Shortcut: Cmd/Ctrl + Enter</p>
 
             <div className="wb-row-2">
               <input className="wb-input" type="datetime-local" value={scheduledAtLocal} onChange={(e) => setScheduledAtLocal(e.target.value)} />
@@ -748,7 +880,7 @@ export default function WorkbenchPage() {
 
             <div className="cta-row">
               <button className="btn primary wb-btn-inline" disabled={busy || !hasAuth || !brandId || !connectionId} onClick={createSchedule}>Queue Post</button>
-              {focusedScheduleId ? <button className="btn wb-btn-inline" disabled={busy || !hasAuth} onClick={() => checkSchedule(focusedScheduleId)}>Check Focused</button> : null}
+              {focusedScheduleId ? <button className="btn wb-btn-inline" disabled={busy || !hasAuth} onClick={() => void checkSchedule(focusedScheduleId)}>Check Focused</button> : null}
             </div>
 
             <div className="wb-preview">
@@ -762,8 +894,14 @@ export default function WorkbenchPage() {
 
         <aside className="wb-rail">
           <div className="wb-panel">
+            <div className="wb-column-tabs">
+              <button className={`wb-tab ${columnView === "queue" ? "active" : ""}`} onClick={() => setColumnView("queue")}>Queue</button>
+              <button className={`wb-tab ${columnView === "sent" ? "active" : ""}`} onClick={() => setColumnView("sent")}>Sent</button>
+              <button className={`wb-tab ${columnView === "failed" ? "active" : ""}`} onClick={() => setColumnView("failed")}>Failed</button>
+            </div>
+
             <div className="wb-rail-head">
-              <h3>Queue</h3>
+              <h3>Items</h3>
               <select className="wb-input wb-filter" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "all" | QueueStatus)}>
                 <option value="all">all</option>
                 <option value="queued">queued</option>
@@ -771,19 +909,41 @@ export default function WorkbenchPage() {
                 <option value="processing">processing</option>
                 <option value="posted">posted</option>
                 <option value="failed">failed</option>
+                <option value="canceled">canceled</option>
               </select>
+            </div>
+
+            <div className="wb-bulk-row">
+              <button className="btn wb-btn-inline" onClick={toggleAllVisible}>Toggle All</button>
+              <button className="btn wb-btn-inline" disabled={busy || selectedIds.length === 0} onClick={() => void bulkCheck()}>Bulk Check</button>
+              <button className="btn wb-btn-inline" disabled={busy || selectedIds.length === 0} onClick={() => void bulkRetryFailed()}>Bulk Retry</button>
+              <button className="btn wb-btn-inline" disabled={busy || selectedIds.length === 0} onClick={() => void bulkCancelQueue()}>Bulk Cancel</button>
+              <button className="btn wb-btn-inline" onClick={clearSelection}>Clear</button>
             </div>
 
             <div className="wb-queue">
               {queueFiltered.length === 0 ? <p className="muted">No posts</p> : null}
               {queueFiltered.map((item) => (
-                <div key={item.id} className={`wb-queue-item tone-${statusTone(item.status)}`}>
+                <div
+                  key={item.id}
+                  className={`wb-queue-item tone-${statusTone(item.status)}`}
+                  draggable
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData("text/post-id", item.id);
+                    event.dataTransfer.effectAllowed = "move";
+                  }}
+                >
+                  <label className="wb-queue-check">
+                    <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} />
+                    <span>{item.id.slice(0, 8)}</span>
+                  </label>
                   <p className="wb-queue-line"><strong>{dateLabel(item.scheduled_at)}</strong></p>
                   <p className="wb-queue-line">status: {item.status}</p>
                   <p className="wb-queue-line">error: {item.error_code ?? "-"}</p>
                   <div className="cta-row">
-                    <button className="btn wb-btn-inline" disabled={busy || !hasAuth} onClick={() => checkSchedule(item.id)}>Check</button>
-                    <button className="btn wb-btn-inline" disabled={busy || !hasAuth || item.status !== "failed"} onClick={() => retrySchedule(item.id)}>Retry</button>
+                    <button className="btn wb-btn-inline" disabled={busy || !hasAuth} onClick={() => void checkSchedule(item.id)}>Check</button>
+                    <button className="btn wb-btn-inline" disabled={busy || !hasAuth || item.status !== "failed"} onClick={() => void retrySchedule(item.id)}>Retry</button>
+                    <button className="btn wb-btn-inline" disabled={busy || !hasAuth || !["scheduled", "queued", "processing"].includes(item.status)} onClick={() => void cancelSchedule(item.id)}>Cancel</button>
                   </div>
                 </div>
               ))}
@@ -814,6 +974,16 @@ export default function WorkbenchPage() {
                     key={day.toISOString()}
                     className={`wb-day ${isSelected ? "active" : ""}`}
                     onClick={() => setSelectedDate(isSelected ? "" : day.toISOString())}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const postId = event.dataTransfer.getData("text/post-id");
+                      if (!postId) return;
+                      void dropToCalendarDay(day, postId);
+                    }}
                   >
                     <p>{day.toLocaleDateString(undefined, { weekday: calendarView === "week" ? "short" : undefined })}</p>
                     <strong>{day.getDate()}</strong>
@@ -823,6 +993,7 @@ export default function WorkbenchPage() {
               })}
             </div>
             {selectedDate ? <p className="muted">Filtered by: {new Date(selectedDate).toLocaleDateString()}</p> : null}
+            <p className="muted">Tip: drag a queue card onto a day to reschedule.</p>
           </div>
 
           <div className="wb-panel">
