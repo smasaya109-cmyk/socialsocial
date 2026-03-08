@@ -210,6 +210,29 @@ li {
   gap: 10px;
 }
 
+.wb-setup {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.wb-step {
+  border: 1px solid #d3ddeb;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  background: #fff;
+}
+
+.wb-step.done {
+  border-color: #8ddbcf;
+  background: #ecfdf8;
+  color: #0f766e;
+}
+
 .wb-presence {
   font-size: 12px;
   font-weight: 700;
@@ -291,6 +314,37 @@ li {
   margin-top: 10px;
   max-height: 220px;
   overflow: auto;
+}
+
+.wb-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.wb-channel-card {
+  border: 1px solid #d8e2ef;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.wb-channel-card strong {
+  display: block;
+  font-size: 13px;
+}
+
+.wb-channel-card span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.wb-channel-card.active {
+  border-color: #7ea2f6;
+  background: #eff4ff;
 }
 
 .wb-brand-item {
@@ -603,6 +657,10 @@ li {
 
   .wb-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .wb-setup {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

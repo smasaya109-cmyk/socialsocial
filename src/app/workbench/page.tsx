@@ -204,6 +204,7 @@ export default function WorkbenchPage() {
   const [statusLog, setStatusLog] = useState<string[]>([]);
   const [draftTitle, setDraftTitle] = useState("Campaign");
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
   const hasAuth = token.length > 20;
 
@@ -243,6 +244,46 @@ export default function WorkbenchPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
+  useEffect(() => {
+    const sameProvider = connections.filter((conn) => conn.provider === provider);
+    if (sameProvider.length === 0) {
+      setConnectionId("");
+      return;
+    }
+    if (!connectionId || !sameProvider.some((conn) => conn.id === connectionId)) {
+      setConnectionId(sameProvider[0].id);
+    }
+  }, [provider, connections, connectionId]);
+
+  useEffect(() => {
+    if (!autoRefresh || !hasAuth || !brandId) return;
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnon || !token) return;
+
+    const tick = async () => {
+      const query = new URLSearchParams({
+        select: "id,scheduled_at,status,error_code,connection_id,asset_id,created_at",
+        brand_id: `eq.${brandId}`,
+        order: "scheduled_at.asc",
+        limit: "100"
+      });
+      const response = await fetch(`${supabaseUrl}/rest/v1/scheduled_posts?${query.toString()}`, {
+        headers: { apikey: supabaseAnon, Authorization: `Bearer ${token}` }
+      });
+      const json = await response.json();
+      if (response.ok && Array.isArray(json)) {
+        setQueue(json);
+      }
+    };
+
+    const timer = setInterval(() => {
+      void tick();
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [autoRefresh, hasAuth, brandId, token]);
+
   const queueFiltered = useMemo(() => {
     let sorted = [...queue].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
     sorted = sorted.filter((item) => matchesColumn(item, columnView));
@@ -266,6 +307,28 @@ export default function WorkbenchPage() {
       failed: queue.filter((x) => x.status === "failed" || x.status === "canceled").length
     };
   }, [queue]);
+
+  const providerConnections = useMemo(
+    () => connections.filter((conn) => conn.provider === provider),
+    [connections, provider]
+  );
+
+  const connectionCountByProvider = useMemo(() => {
+    return {
+      x: connections.filter((conn) => conn.provider === "x").length,
+      instagram: connections.filter((conn) => conn.provider === "instagram").length,
+      threads: connections.filter((conn) => conn.provider === "threads").length
+    };
+  }, [connections]);
+
+  const setupProgress = useMemo(() => {
+    return {
+      loggedIn: hasAuth,
+      brandSelected: Boolean(brandId),
+      connected: providerConnections.length > 0,
+      readyToQueue: Boolean(brandId && connectionId)
+    };
+  }, [hasAuth, brandId, providerConnections.length, connectionId]);
 
   const week = useMemo(() => weekDays(calendarBase), [calendarBase]);
   const month = useMemo(() => monthGrid(calendarBase), [calendarBase]);
@@ -354,7 +417,21 @@ export default function WorkbenchPage() {
       });
       const json = await response.json();
       if (!response.ok || !json.brand?.id) {
-        throw new Error(formatApiError(json.error, `create brand failed: ${response.status}`));
+        throw new Error(
+          formatApiError(
+            {
+              status: response.status,
+              requestId: json?.requestId ?? response.headers.get("x-request-id"),
+              code: json?.code ?? null,
+              hint: json?.hint ?? null,
+              error: json?.error ?? null,
+              missing: json?.missing ?? null,
+              message: json?.message ?? null,
+              details: json?.details ?? null
+            },
+            `create brand failed: ${response.status}`
+          )
+        );
       }
 
       setBrandId(json.brand.id);
@@ -399,7 +476,6 @@ export default function WorkbenchPage() {
     const query = new URLSearchParams({
       select: "id,provider,provider_account_id,created_at",
       brand_id: `eq.${targetBrandId}`,
-      provider: `eq.${provider}`,
       order: "created_at.desc"
     });
 
@@ -413,9 +489,10 @@ export default function WorkbenchPage() {
     }
 
     setConnections(json);
-    if (json[0]?.id) {
-      setConnectionId(json[0].id);
-      pushLog(`loaded ${provider} connections: ${json.length}`);
+    const sameProvider = (json as Connection[]).filter((conn) => conn.provider === provider);
+    if (sameProvider[0]?.id) {
+      setConnectionId(sameProvider[0].id);
+      pushLog(`loaded ${provider} connections: ${sameProvider.length}`);
     } else {
       setConnectionId("");
       pushLog(`no ${provider} connections`);
@@ -742,11 +819,21 @@ export default function WorkbenchPage() {
           <p className="muted">Plan, queue, and automate cross-channel posts.</p>
         </div>
         <div className="wb-top-actions">
+          <button className="btn wb-btn-inline" onClick={() => setAutoRefresh((v) => !v)}>
+            Auto {autoRefresh ? "On" : "Off"}
+          </button>
           <button className="btn wb-btn-inline" disabled={busy || !hasAuth || !brandId} onClick={refreshWorkspace}>
             Refresh
           </button>
           <span className={`wb-presence ${hasAuth ? "on" : "off"}`}>{hasAuth ? "Connected" : "Disconnected"}</span>
         </div>
+      </section>
+
+      <section className="wb-setup">
+        <div className={`wb-step ${setupProgress.loggedIn ? "done" : ""}`}>1. Login</div>
+        <div className={`wb-step ${setupProgress.brandSelected ? "done" : ""}`}>2. Select Brand</div>
+        <div className={`wb-step ${setupProgress.connected ? "done" : ""}`}>3. Connect {providerLabel(provider)}</div>
+        <div className={`wb-step ${setupProgress.readyToQueue ? "done" : ""}`}>4. Queue First Post</div>
       </section>
 
       <section className="wb-kpis">
@@ -786,24 +873,31 @@ export default function WorkbenchPage() {
 
           <div className="wb-panel">
             <h3>Channels</h3>
-            <select className="wb-input" value={provider} onChange={(e) => setProvider(e.target.value as Provider)}>
-              <option value="x">X</option>
-              <option value="instagram">Instagram</option>
-              <option value="threads">Threads</option>
-            </select>
+            <div className="wb-channel-grid">
+              {(["x", "instagram", "threads"] as Provider[]).map((p) => (
+                <button
+                  key={p}
+                  className={`wb-channel-card ${provider === p ? "active" : ""}`}
+                  onClick={() => setProvider(p)}
+                >
+                  <strong>{providerLabel(p)}</strong>
+                  <span>{connectionCountByProvider[p]} connected</span>
+                </button>
+              ))}
+            </div>
             <button className="btn wb-btn" disabled={busy || !hasAuth || !brandId} onClick={startProviderConnect}>
               Connect {providerLabel(provider)}
             </button>
             <button className="btn wb-btn" disabled={busy || !hasAuth || !brandId} onClick={() => loadConnections()}>
-              Reload
+              Reload All Connections
             </button>
             <select className="wb-input" value={connectionId} onChange={(e) => setConnectionId(e.target.value)}>
               <option value="">select connection</option>
-              {connections.map((conn) => (
+              {providerConnections.map((conn) => (
                 <option key={conn.id} value={conn.id}>{conn.provider_account_id}</option>
               ))}
             </select>
-            <p className="muted">{connections.length} connected</p>
+            <p className="muted">{providerConnections.length} {providerLabel(provider)} account(s)</p>
           </div>
 
           <div className="wb-panel">

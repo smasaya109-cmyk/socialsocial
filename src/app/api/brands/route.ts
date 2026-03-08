@@ -70,6 +70,16 @@ function toSafeHint(error: PgErrorLike | undefined): string {
   return "database_error";
 }
 
+function toSafeRuntimeHint(message?: string): string {
+  const text = (message || "").toLowerCase();
+  if (!text) return "runtime_error";
+  if (text.includes("fetch failed")) return "supabase_fetch_failed";
+  if (text.includes("debug_jwt2")) return "debug_rpc_failed";
+  if (text.includes("missing_supabase_env")) return "supabase_env_missing";
+  if (text.includes("invalid url")) return "supabase_url_invalid";
+  return "runtime_error";
+}
+
 function logServerError(scope: string, requestId: string, error: unknown, pgError?: PgErrorLike) {
   const err = error instanceof Error ? error : new Error(serializeUnknown(error));
   console.error(`[${scope}] failure`, {
@@ -139,15 +149,26 @@ function getUserContextClient(accessToken: string) {
   });
 }
 
-function internalErrorResponse(requestId: string, pgError?: PgErrorLike, status = 500) {
+function internalErrorResponse(
+  requestId: string,
+  pgError?: PgErrorLike,
+  status = 500,
+  runtimeMessage?: string
+) {
+  const safeMessage = safeDetails(pgError?.message) || safeDetails(runtimeMessage);
+  const hint =
+    pgError && pgError.code
+      ? redactLogText(pgError.hint) || toSafeHint(pgError)
+      : toSafeRuntimeHint(runtimeMessage || pgError?.message);
   return jsonWithRequestId(
     requestId,
     {
       error: "Internal",
       requestId,
       code: pgError?.code ?? null,
-      hint: redactLogText(pgError?.hint) || toSafeHint(pgError),
-      details: safeDetails(pgError?.details)
+      hint,
+      details: safeDetails(pgError?.details),
+      message: safeMessage
     },
     status
   );
@@ -251,7 +272,9 @@ export async function POST(request: Request) {
       return jsonWithRequestId(requestId, { error: error.message, requestId }, error.status);
     }
     const pgError = asPgErrorLike(error);
+    const runtimeMessage =
+      error instanceof Error ? error.message : typeof error === "string" ? error : serializeUnknown(error);
     logServerError("api.brands.exception", requestId, error, pgError);
-    return internalErrorResponse(requestId, pgError);
+    return internalErrorResponse(requestId, pgError, 500, runtimeMessage);
   }
 }
