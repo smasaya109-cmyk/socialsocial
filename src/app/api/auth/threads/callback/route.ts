@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/db/supabase";
 import { redactToken } from "@/lib/logging/redaction";
-import { exchangeMetaCodeForToken, maskMetaErrorMessage, resolveThreadsAccount } from "@/lib/providers/meta/oauth";
+import {
+  exchangeThreadsCodeForToken,
+  maskMetaErrorMessage,
+  resolveThreadsProfile
+} from "@/lib/providers/meta/oauth";
 import { encryptSecret } from "@/lib/security/encryption";
 
 export const runtime = "nodejs";
@@ -55,7 +59,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "State expired" }, { status: 400 });
     }
 
-    const token = await exchangeMetaCodeForToken({
+    const token = await exchangeThreadsCodeForToken({
       clientId: env.clientId as string,
       clientSecret: env.clientSecret as string,
       code,
@@ -65,7 +69,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Token exchange returned no access token" }, { status: 502 });
     }
 
-    const account = await resolveThreadsAccount(token.access_token);
+    const account = await resolveThreadsProfile(token.access_token);
     const encryptedAccess = encryptSecret(account.tokenToStore);
     const tokenExpiresAt =
       typeof token.expires_in === "number"

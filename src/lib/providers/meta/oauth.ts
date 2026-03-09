@@ -3,6 +3,8 @@ import type { SocialProvider } from "@/lib/providers/types";
 
 const META_OAUTH_BASE = "https://www.facebook.com/v23.0/dialog/oauth";
 const META_GRAPH_BASE = "https://graph.facebook.com/v23.0";
+const THREADS_OAUTH_BASE = "https://threads.net/oauth/authorize";
+const THREADS_GRAPH_BASE = "https://graph.threads.net";
 
 type MetaTokenResponse = {
   access_token?: string;
@@ -61,6 +63,34 @@ export async function exchangeMetaCodeForToken(input: {
   const text = await response.text();
   if (!response.ok) {
     throw new Error(`meta_token_exchange_failed:${response.status}:${maskSnippet(text)}`);
+  }
+  return JSON.parse(text) as MetaTokenResponse;
+}
+
+export async function exchangeThreadsCodeForToken(input: {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  code: string;
+}): Promise<MetaTokenResponse> {
+  const body = new URLSearchParams({
+    client_id: input.clientId,
+    client_secret: input.clientSecret,
+    grant_type: "authorization_code",
+    redirect_uri: input.redirectUri,
+    code: input.code
+  });
+
+  const response = await fetch(`${THREADS_GRAPH_BASE}/oauth/access_token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: body.toString()
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`threads_token_exchange_failed:${response.status}:${maskSnippet(text)}`);
   }
   return JSON.parse(text) as MetaTokenResponse;
 }
@@ -136,12 +166,53 @@ export async function resolveThreadsAccount(userAccessToken: string): Promise<{
   };
 }
 
+export async function resolveThreadsProfile(accessToken: string): Promise<{
+  providerAccountId: string;
+  tokenToStore: string;
+}> {
+  const params = new URLSearchParams({
+    fields: "id,username",
+    access_token: accessToken
+  });
+  const response = await fetch(`${THREADS_GRAPH_BASE}/v1.0/me?${params.toString()}`);
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`threads_me_failed:${response.status}:${maskSnippet(text)}`);
+  }
+
+  const parsed = JSON.parse(text) as { id?: string; username?: string };
+  if (!parsed.id) {
+    throw new Error("threads_profile_not_found");
+  }
+
+  return {
+    providerAccountId: parsed.id,
+    tokenToStore: accessToken
+  };
+}
+
+export function buildThreadsAuthorizeUrl(input: {
+  clientId: string;
+  redirectUri: string;
+  scope: string;
+  state: string;
+}): string {
+  const params = new URLSearchParams({
+    client_id: input.clientId,
+    redirect_uri: input.redirectUri,
+    scope: input.scope,
+    response_type: "code",
+    state: input.state
+  });
+  return `${THREADS_OAUTH_BASE}?${params.toString()}`;
+}
+
 export function metaScopeForProvider(provider: SocialProvider): string {
   if (provider === "instagram") {
     return process.env.INSTAGRAM_OAUTH_SCOPE || "instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement,business_management";
   }
   if (provider === "threads") {
-    return process.env.THREADS_OAUTH_SCOPE || "threads_basic,threads_content_publish,pages_show_list,pages_read_engagement,business_management";
+    return process.env.THREADS_OAUTH_SCOPE || "threads_basic,threads_content_publish";
   }
   return "";
 }

@@ -4,7 +4,7 @@ import { AuthError, requireUser } from "@/lib/auth/require-user";
 import { assertBrandMemberOrNotFound, BrandAccessError } from "@/lib/authz/brand-membership";
 import { getSupabaseAdminClient, getSupabaseUserClient } from "@/lib/db/supabase";
 import {
-  buildMetaAuthorizeUrl,
+  buildThreadsAuthorizeUrl,
   createOauthState,
   createStateVerifier,
   metaScopeForProvider
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to initialize OAuth state" }, { status: 500 });
     }
 
-    const authorizeUrl = buildMetaAuthorizeUrl({
+    const authorizeUrl = buildThreadsAuthorizeUrl({
       clientId: env.clientId as string,
       redirectUri: env.redirectUri as string,
       scope: env.scope,
