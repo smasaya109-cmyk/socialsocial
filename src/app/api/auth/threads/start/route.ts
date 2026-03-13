@@ -17,12 +17,10 @@ const schema = z.object({
 });
 
 function requiredEnv() {
-  const clientId = process.env.META_CLIENT_ID;
+  const clientId = process.env.THREADS_CLIENT_ID || process.env.META_CLIENT_ID;
   const redirectUri = process.env.THREADS_OAUTH_REDIRECT_URI;
   const scope = metaScopeForProvider("threads");
-  const missing = [!clientId ? "META_CLIENT_ID" : null, !redirectUri ? "THREADS_OAUTH_REDIRECT_URI" : null].filter(
-    Boolean
-  );
+  const missing = [!clientId ? "THREADS_CLIENT_ID" : null, !redirectUri ? "THREADS_OAUTH_REDIRECT_URI" : null].filter(Boolean);
   return { clientId, redirectUri, scope, missing };
 }
 

@@ -11,9 +11,11 @@ import { encryptSecret } from "@/lib/security/encryption";
 export const runtime = "nodejs";
 
 function getRequiredEnv() {
-  const clientId = process.env.META_CLIENT_ID;
-  const clientSecret = process.env.META_CLIENT_SECRET;
-  const missing = [!clientId ? "META_CLIENT_ID" : null, !clientSecret ? "META_CLIENT_SECRET" : null].filter(Boolean);
+  const clientId = process.env.THREADS_CLIENT_ID || process.env.META_CLIENT_ID;
+  const clientSecret = process.env.THREADS_CLIENT_SECRET || process.env.META_CLIENT_SECRET;
+  const missing = [!clientId ? "THREADS_CLIENT_ID" : null, !clientSecret ? "THREADS_CLIENT_SECRET" : null].filter(
+    Boolean
+  );
   return { clientId, clientSecret, missing };
 }
 
