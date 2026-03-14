@@ -97,6 +97,12 @@ const META_BY_CODE: Record<string, PublishErrorMeta> = {
     message: "Threads rejected the video media. Check format and retry.",
     retryable: true
   },
+  THREADS_VIDEO_NOT_READY: {
+    code: "THREADS_VIDEO_NOT_READY",
+    title: "Threads video is still preparing",
+    message: "Threads is still preparing the video. Retry after a short wait.",
+    retryable: true
+  },
   THREADS_VIDEO_PROCESSING_TIMEOUT: {
     code: "THREADS_VIDEO_PROCESSING_TIMEOUT",
     title: "Threads video processing timeout",

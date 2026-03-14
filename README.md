@@ -126,7 +126,7 @@ Step6 着手（初期）:
   - OAuth連携（`/api/auth/threads/start` -> `/api/auth/threads/callback`）は実装済み。
   - `PROVIDER_STUB_MODE=off` で Threads API (`/threads` -> `/threads_publish`) による実投稿を実行します。
   - `TEXT/IMAGE/VIDEO` を asset有無で自動選択します。
-  - video は `threads_publish` を短時間リトライして provider側の可用化待ちを吸収します。
+  - video は `threads_publish` を長めにリトライして provider側の可用化待ちを吸収します。
   - 実API確認済み:
     - OAuth connect: 成功
     - text publish: 成功

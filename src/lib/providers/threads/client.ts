@@ -2,8 +2,8 @@ import type { ProviderClient, ProviderPublishInput, ProviderPublishResult } from
 import { refreshThreadsLongLivedToken } from "@/lib/providers/meta/oauth";
 
 const REQUEST_TIMEOUT_MS = 20_000;
-const DEFAULT_VIDEO_PUBLISH_RETRY_INTERVAL_MS = 5_000;
-const DEFAULT_VIDEO_PUBLISH_RETRY_COUNT = 12;
+const DEFAULT_VIDEO_PUBLISH_RETRY_INTERVAL_MS = 10_000;
+const DEFAULT_VIDEO_PUBLISH_RETRY_COUNT = 24;
 
 type MetaErrorPayload = {
   error?: {
@@ -44,12 +44,14 @@ function formatMetaErrorForLog(payload: MetaErrorPayload | null, fallbackRaw: st
 
 function classifyThreadsError(status: number, payload: MetaErrorPayload | null): string {
   const code = payload?.error?.code;
+  const subcode = payload?.error?.error_subcode;
   const message = (payload?.error?.message || "").toLowerCase();
 
   if (status === 401 || code === 190) return "THREADS_UNAUTHORIZED";
   if (status === 403 || code === 10 || message.includes("permission")) return "THREADS_SCOPE_MISSING";
   if (status === 429 || code === 4 || code === 17) return "THREADS_RATE_LIMIT";
   if (status >= 500) return "THREADS_PROVIDER_UNAVAILABLE";
+  if (status === 400 && subcode === 4279009) return "THREADS_VIDEO_NOT_READY";
   if (status === 400 && message.includes("video")) return "THREADS_VIDEO_INVALID";
   if (status === 400 && message.includes("image")) return "THREADS_IMAGE_INVALID";
   if (status === 400 && message.includes("text")) return "THREADS_BAD_REQUEST";
@@ -82,11 +84,14 @@ function getVideoPublishRetryCount(): number {
 
 function shouldRetryVideoPublish(status: number, payload: MetaErrorPayload | null): boolean {
   if (status !== 400 && status !== 500 && status !== 503) return false;
+  const subcode = payload?.error?.error_subcode;
   const message = (payload?.error?.message || "").toLowerCase();
   return (
+    subcode === 4279009 ||
     message.includes("processing") ||
     message.includes("please wait") ||
     message.includes("not ready") ||
+    message.includes("does not exist") ||
     message.includes("temporarily unavailable") ||
     message.includes("try again")
   );
