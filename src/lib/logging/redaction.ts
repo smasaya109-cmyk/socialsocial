@@ -1,4 +1,5 @@
 const MAX_BODY_LOG_CHARS = 120;
+const MAX_PROVIDER_RESPONSE_CHARS = 240;
 
 export function redactToken(value: string | null | undefined): string {
   if (!value) return "[redacted]";
@@ -28,4 +29,14 @@ export function redactBody(value: string | null | undefined): string {
     return `${value.slice(0, 32)}...[redacted]`;
   }
   return `${value.slice(0, 64)}...[redacted:${value.length - 64} chars]`;
+}
+
+export function redactProviderResponse(value: string | null | undefined): string {
+  if (!value) return "";
+  const redacted = value
+    .replace(/https?:\/\/[^\s]+/g, "[redacted-url]")
+    .replace(/[A-Za-z0-9+/_-]{20,}\.[A-Za-z0-9+/_-]{10,}\.[A-Za-z0-9+/_-]{10,}/g, "[redacted-jwt]")
+    .replace(/\s+/g, " ");
+  if (redacted.length <= MAX_PROVIDER_RESPONSE_CHARS) return redacted;
+  return `${redacted.slice(0, MAX_PROVIDER_RESPONSE_CHARS)}...[truncated:${redacted.length - MAX_PROVIDER_RESPONSE_CHARS} chars]`;
 }

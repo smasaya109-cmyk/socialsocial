@@ -6,7 +6,7 @@ import {
   InternalAuthConfigError,
   InternalAuthError
 } from "@/lib/internal/require-internal-auth";
-import { redactBody } from "@/lib/logging/redaction";
+import { redactBody, redactProviderResponse } from "@/lib/logging/redaction";
 import { notifyCreditsDepleted } from "@/lib/notifications/ops-alert";
 
 const schema = z.object({
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       scheduled_post_id: post.id,
       result: input.result,
       provider_response_masked: input.providerResponseMasked
-        ? redactBody(input.providerResponseMasked)
+        ? redactProviderResponse(input.providerResponseMasked)
         : null,
       error_code: input.errorCode ?? null
     });
