@@ -3,6 +3,8 @@ import type { ProviderClient, ProviderPublishInput, ProviderPublishResult } from
 const REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_POLL_INTERVAL_MS = 4_000;
 const DEFAULT_POLL_TIMEOUT_MS = 180_000;
+const DEFAULT_IMAGE_PUBLISH_RETRY_INTERVAL_MS = 3_000;
+const DEFAULT_IMAGE_PUBLISH_RETRY_COUNT = 5;
 
 type MetaErrorPayload = {
   error?: {
@@ -69,6 +71,24 @@ function getVideoPollTimeoutMs(): number {
   const raw = Number(process.env.INSTAGRAM_VIDEO_POLL_TIMEOUT_MS ?? DEFAULT_POLL_TIMEOUT_MS);
   if (!Number.isFinite(raw) || raw < 5000) return DEFAULT_POLL_TIMEOUT_MS;
   return Math.min(Math.floor(raw), 10 * 60 * 1000);
+}
+
+function getImagePublishRetryIntervalMs(): number {
+  const raw = Number(process.env.INSTAGRAM_IMAGE_PUBLISH_RETRY_INTERVAL_MS ?? DEFAULT_IMAGE_PUBLISH_RETRY_INTERVAL_MS);
+  if (!Number.isFinite(raw) || raw < 500) return DEFAULT_IMAGE_PUBLISH_RETRY_INTERVAL_MS;
+  return Math.min(Math.floor(raw), 15000);
+}
+
+function getImagePublishRetryCount(): number {
+  const raw = Number(process.env.INSTAGRAM_IMAGE_PUBLISH_RETRY_COUNT ?? DEFAULT_IMAGE_PUBLISH_RETRY_COUNT);
+  if (!Number.isFinite(raw) || raw < 1) return DEFAULT_IMAGE_PUBLISH_RETRY_COUNT;
+  return Math.min(Math.floor(raw), 10);
+}
+
+function shouldRetryImagePublish(status: number, payload: MetaErrorPayload | null): boolean {
+  if (status !== 400) return false;
+  const message = (payload?.error?.message || "").toLowerCase();
+  return message.includes("media id is not available") || message.includes("not available") || message.includes("not ready");
 }
 
 async function waitUntilContainerReady(input: {
@@ -200,48 +220,72 @@ export class InstagramProviderClient implements ProviderClient {
         };
       }
 
-      const ready = await waitUntilContainerReady({
-        apiBase,
-        creationId,
-        accessToken: input.accessToken,
-        signal: controller.signal
-      });
-      if (!ready.ok) {
-        return {
-          ok: false,
-          errorCode: ready.errorCode,
-          providerResponseMasked: ready.masked
-        };
+      if (input.mediaKind === "video") {
+        const ready = await waitUntilContainerReady({
+          apiBase,
+          creationId,
+          accessToken: input.accessToken,
+          signal: controller.signal
+        });
+        if (!ready.ok) {
+          return {
+            ok: false,
+            errorCode: ready.errorCode,
+            providerResponseMasked: ready.masked
+          };
+        }
       }
 
       const publishUrl = `${apiBase}/${input.providerAccountId}/media_publish`;
-      const publishBody = new URLSearchParams({
-        creation_id: creationId,
-        access_token: input.accessToken
-      });
+      const imageRetryCount = input.mediaKind === "image" ? getImagePublishRetryCount() : 1;
+      const imageRetryIntervalMs = getImagePublishRetryIntervalMs();
 
-      const publishResponse = await fetch(publishUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: publishBody.toString(),
-        signal: controller.signal
-      });
+      let publishRaw = "";
+      let publishJson: unknown = null;
+      let publishOk = false;
 
-      const publishRaw = await readText(publishResponse);
-      if (!publishResponse.ok) {
-        const payload = parseMetaError(publishRaw);
-        return {
-          ok: false,
-          errorCode: classifyInstagramError(publishResponse.status, payload),
-          providerResponseMasked: `publish status=${publishResponse.status} body=${maskSnippet(payload?.error?.message || publishRaw)}`
-        };
+      for (let attempt = 1; attempt <= imageRetryCount; attempt += 1) {
+        const publishBody = new URLSearchParams({
+          creation_id: creationId,
+          access_token: input.accessToken
+        });
+
+        const publishResponse = await fetch(publishUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: publishBody.toString(),
+          signal: controller.signal
+        });
+
+        publishRaw = await readText(publishResponse);
+        if (!publishResponse.ok) {
+          const payload = parseMetaError(publishRaw);
+          if (input.mediaKind === "image" && attempt < imageRetryCount && shouldRetryImagePublish(publishResponse.status, payload)) {
+            await sleep(imageRetryIntervalMs);
+            continue;
+          }
+          return {
+            ok: false,
+            errorCode: classifyInstagramError(publishResponse.status, payload),
+            providerResponseMasked: `publish status=${publishResponse.status} body=${maskSnippet(payload?.error?.message || publishRaw)}`
+          };
+        }
+
+        try {
+          publishJson = JSON.parse(publishRaw);
+        } catch {
+          publishJson = null;
+        }
+        publishOk = true;
+        break;
       }
 
-      let publishJson: unknown = null;
-      try {
-        publishJson = JSON.parse(publishRaw);
-      } catch {
-        publishJson = null;
+      if (!publishOk) {
+        return {
+          ok: false,
+          errorCode: "INSTAGRAM_MEDIA_INVALID",
+          providerResponseMasked: "publish_response_unavailable"
+        };
       }
 
       const providerPostId =

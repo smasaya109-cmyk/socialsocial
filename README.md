@@ -118,6 +118,7 @@ Step6 着手（初期）:
   - OAuth連携（`/api/auth/instagram/start` -> `/api/auth/instagram/callback`）は実装済み。
   - `scheduled_posts.asset_id` を使った画像/動画投稿フローに対応（asset必須）。
   - 動画は `video_url` + 処理完了ポーリング後に publish。
+  - 画像は `media_publish` が早すぎるケースに備えて短時間リトライします。
 - Threads:
   - OAuth連携（`/api/auth/threads/start` -> `/api/auth/threads/callback`）は実装済み。
   - `PROVIDER_STUB_MODE=off` で Threads API (`/threads` -> `/threads_publish`) による実投稿を実行します。
