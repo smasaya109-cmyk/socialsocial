@@ -193,10 +193,14 @@ export class ThreadsProviderClient implements ProviderClient {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const created = await createContainer({
+      let activeAccessToken = input.accessToken;
+      let rotatedAccessToken: string | undefined;
+      let rotatedExpiresIn: number | undefined;
+
+      let created = await createContainer({
         apiBase,
         accountId,
-        accessToken: input.accessToken,
+        accessToken: activeAccessToken,
         text: input.body,
         mediaUrl: input.mediaUrl,
         mediaKind: input.mediaKind,
@@ -205,18 +209,42 @@ export class ThreadsProviderClient implements ProviderClient {
 
       if (!created.ok) {
         const payload = parseMetaError(created.raw);
+        if (created.status === 401 || payload?.error?.code === 190) {
+          try {
+            const refreshed = await refreshThreadsLongLivedToken(activeAccessToken);
+            if (refreshed.access_token) {
+              activeAccessToken = refreshed.access_token;
+              rotatedAccessToken = refreshed.access_token;
+              rotatedExpiresIn = typeof refreshed.expires_in === "number" ? refreshed.expires_in : undefined;
+              created = await createContainer({
+                apiBase,
+                accountId,
+                accessToken: activeAccessToken,
+                text: input.body,
+                mediaUrl: input.mediaUrl,
+                mediaKind: input.mediaKind,
+                signal: controller.signal
+              });
+            }
+          } catch {
+            // Fall through to classified unauthorized response below.
+          }
+        }
+      }
+
+      if (!created.ok) {
+        const payload = parseMetaError(created.raw);
         return {
           ok: false,
           errorCode: classifyThreadsError(created.status, payload),
-          providerResponseMasked: `create status=${created.status} body=${maskSnippet(payload?.error?.message || created.raw)}`
+          providerResponseMasked: `create status=${created.status} body=${maskSnippet(payload?.error?.message || created.raw)}`,
+          rotatedAccessToken,
+          rotatedExpiresIn
         };
       }
 
       const publishRetryCount = input.mediaKind === "video" ? getVideoPublishRetryCount() : 1;
       const publishRetryIntervalMs = getVideoPublishRetryIntervalMs();
-      let activeAccessToken = input.accessToken;
-      let rotatedAccessToken: string | undefined;
-      let rotatedExpiresIn: number | undefined;
       let published: Awaited<ReturnType<typeof publishContainer>> | null = null;
 
       for (let attempt = 1; attempt <= publishRetryCount; attempt += 1) {
