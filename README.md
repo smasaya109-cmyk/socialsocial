@@ -144,8 +144,8 @@ Step6 着手（初期）:
 - `POST /api/auth/instagram/start` / `GET /api/auth/instagram/callback`
 - `POST /api/auth/threads/start` / `GET /api/auth/threads/callback`
 - Required env:
-  - `INSTAGRAM_CLIENT_ID`
-  - `INSTAGRAM_CLIENT_SECRET`
+  - `META_CLIENT_ID`
+  - `META_CLIENT_SECRET`
   - `INSTAGRAM_OAUTH_REDIRECT_URI`
   - `THREADS_CLIENT_ID`
   - `THREADS_CLIENT_SECRET`

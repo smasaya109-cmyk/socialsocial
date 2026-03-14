@@ -11,11 +11,9 @@ import { encryptSecret } from "@/lib/security/encryption";
 export const runtime = "nodejs";
 
 function getRequiredEnv() {
-  const clientId = process.env.INSTAGRAM_CLIENT_ID || process.env.META_CLIENT_ID;
-  const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET || process.env.META_CLIENT_SECRET;
-  const missing = [!clientId ? "INSTAGRAM_CLIENT_ID" : null, !clientSecret ? "INSTAGRAM_CLIENT_SECRET" : null].filter(
-    Boolean
-  );
+  const clientId = process.env.META_CLIENT_ID;
+  const clientSecret = process.env.META_CLIENT_SECRET;
+  const missing = [!clientId ? "META_CLIENT_ID" : null, !clientSecret ? "META_CLIENT_SECRET" : null].filter(Boolean);
   return { clientId, clientSecret, missing };
 }
 

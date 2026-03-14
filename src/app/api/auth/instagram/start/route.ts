@@ -17,10 +17,10 @@ const schema = z.object({
 });
 
 function requiredEnv() {
-  const clientId = process.env.INSTAGRAM_CLIENT_ID || process.env.META_CLIENT_ID;
+  const clientId = process.env.META_CLIENT_ID;
   const redirectUri = process.env.INSTAGRAM_OAUTH_REDIRECT_URI;
   const scope = metaScopeForProvider("instagram");
-  const missing = [!clientId ? "INSTAGRAM_CLIENT_ID" : null, !redirectUri ? "INSTAGRAM_OAUTH_REDIRECT_URI" : null].filter(Boolean);
+  const missing = [!clientId ? "META_CLIENT_ID" : null, !redirectUri ? "INSTAGRAM_OAUTH_REDIRECT_URI" : null].filter(Boolean);
   return { clientId, redirectUri, scope, missing };
 }
 
