@@ -1,6 +1,8 @@
 import type { ProviderClient, ProviderPublishInput, ProviderPublishResult } from "@/lib/providers/types";
 
 const REQUEST_TIMEOUT_MS = 20_000;
+const DEFAULT_POLL_INTERVAL_MS = 4_000;
+const DEFAULT_POLL_TIMEOUT_MS = 180_000;
 
 type MetaErrorPayload = {
   error?: {
@@ -9,6 +11,12 @@ type MetaErrorPayload = {
     error_subcode?: number;
     type?: string;
   };
+};
+
+type ContainerStatusPayload = {
+  status?: string;
+  status_code?: string;
+  error_message?: string;
 };
 
 function maskSnippet(text: string): string {
@@ -48,6 +56,22 @@ async function readText(response: Response): Promise<string> {
   } catch {
     return "";
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getVideoPollIntervalMs(): number {
+  const raw = Number(process.env.THREADS_VIDEO_POLL_INTERVAL_MS ?? DEFAULT_POLL_INTERVAL_MS);
+  if (!Number.isFinite(raw) || raw < 500) return DEFAULT_POLL_INTERVAL_MS;
+  return Math.min(Math.floor(raw), 30000);
+}
+
+function getVideoPollTimeoutMs(): number {
+  const raw = Number(process.env.THREADS_VIDEO_POLL_TIMEOUT_MS ?? DEFAULT_POLL_TIMEOUT_MS);
+  if (!Number.isFinite(raw) || raw < 5000) return DEFAULT_POLL_TIMEOUT_MS;
+  return Math.min(Math.floor(raw), 10 * 60 * 1000);
 }
 
 async function createContainer(input: {
@@ -145,6 +169,66 @@ async function publishContainer(input: {
   return { ok: true, providerPostId };
 }
 
+async function waitUntilContainerReady(input: {
+  apiBase: string;
+  creationId: string;
+  accessToken: string;
+  signal: AbortSignal;
+}): Promise<{ ok: true } | { ok: false; errorCode: string; masked: string }> {
+  const startedAt = Date.now();
+  const pollInterval = getVideoPollIntervalMs();
+  const pollTimeout = getVideoPollTimeoutMs();
+
+  while (Date.now() - startedAt <= pollTimeout) {
+    const params = new URLSearchParams({
+      fields: "status,status_code,error_message",
+      access_token: input.accessToken
+    });
+    const response = await fetch(`${input.apiBase}/${input.creationId}?${params.toString()}`, {
+      signal: input.signal
+    });
+    const raw = await readText(response);
+
+    if (!response.ok) {
+      const payload = parseMetaError(raw);
+      return {
+        ok: false,
+        errorCode: classifyThreadsError(response.status, payload),
+        masked: `poll status=${response.status} body=${maskSnippet(payload?.error?.message || raw)}`
+      };
+    }
+
+    let payload: ContainerStatusPayload | null = null;
+    try {
+      payload = JSON.parse(raw) as ContainerStatusPayload;
+    } catch {
+      payload = null;
+    }
+
+    const statusCode = (payload?.status_code || payload?.status || "").toUpperCase();
+
+    if (statusCode === "FINISHED" || statusCode === "PUBLISHED") {
+      return { ok: true };
+    }
+
+    if (statusCode === "ERROR" || statusCode === "EXPIRED" || statusCode === "FAILED") {
+      return {
+        ok: false,
+        errorCode: "THREADS_VIDEO_PROCESSING_FAILED",
+        masked: `poll status=${statusCode} message=${maskSnippet(payload?.error_message || "")}`
+      };
+    }
+
+    await sleep(pollInterval);
+  }
+
+  return {
+    ok: false,
+    errorCode: "THREADS_VIDEO_PROCESSING_TIMEOUT",
+    masked: "threads_video_processing_timeout"
+  };
+}
+
 export class ThreadsProviderClient implements ProviderClient {
   async publish(input: ProviderPublishInput): Promise<ProviderPublishResult> {
     const apiBase = (process.env.THREADS_API_BASE_URL || "https://graph.threads.net/v1.0").replace(/\/$/, "");
@@ -179,6 +263,22 @@ export class ThreadsProviderClient implements ProviderClient {
           errorCode: classifyThreadsError(created.status, payload),
           providerResponseMasked: `create status=${created.status} body=${maskSnippet(payload?.error?.message || created.raw)}`
         };
+      }
+
+      if (input.mediaKind === "video") {
+        const ready = await waitUntilContainerReady({
+          apiBase,
+          creationId: created.creationId,
+          accessToken: input.accessToken,
+          signal: controller.signal
+        });
+        if (!ready.ok) {
+          return {
+            ok: false,
+            errorCode: ready.errorCode,
+            providerResponseMasked: ready.masked
+          };
+        }
       }
 
       const published = await publishContainer({

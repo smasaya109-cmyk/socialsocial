@@ -122,6 +122,7 @@ Step6 着手（初期）:
   - OAuth連携（`/api/auth/threads/start` -> `/api/auth/threads/callback`）は実装済み。
   - `PROVIDER_STUB_MODE=off` で Threads API (`/threads` -> `/threads_publish`) による実投稿を実行します。
   - `TEXT/IMAGE/VIDEO` を asset有無で自動選択します。
+  - video は container status をポーリングしてから publish します。
 - TikTok:
   - APIクライアントの枠のみ。実投稿は未対応。
 
