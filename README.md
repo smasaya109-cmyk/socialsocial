@@ -118,13 +118,41 @@ Step6 着手（初期）:
   - OAuth連携（`/api/auth/instagram/start` -> `/api/auth/instagram/callback`）は実装済み。
   - `scheduled_posts.asset_id` を使った画像/動画投稿フローに対応（asset必須）。
   - 画像/動画とも `media_publish` が早すぎるケースに備えて短時間リトライします。
+  - 実API確認済み:
+    - OAuth connect: 成功
+    - image publish: 成功
+    - reels(video) publish: 成功
 - Threads:
   - OAuth連携（`/api/auth/threads/start` -> `/api/auth/threads/callback`）は実装済み。
   - `PROVIDER_STUB_MODE=off` で Threads API (`/threads` -> `/threads_publish`) による実投稿を実行します。
   - `TEXT/IMAGE/VIDEO` を asset有無で自動選択します。
-  - video は container status をポーリングしてから publish します。
+  - video は `threads_publish` を短時間リトライして provider側の可用化待ちを吸収します。
+  - 実API確認済み:
+    - OAuth connect: 成功
+    - text publish: 成功
+    - image publish: 成功
+    - video publish: 追加調整対象
 - TikTok:
   - APIクライアントの枠のみ。実投稿は未対応。
+
+## Verified Real API Results
+2026-03-14 時点で、Production deploy target (`https://socialsocial-three.vercel.app`) に対して以下を確認済みです。
+
+- Threads
+  - OAuth connect: 成功
+  - text scheduled publish: 成功
+  - image scheduled publish: 成功
+  - video scheduled publish: 未確定（provider依存の追加調整中）
+- Instagram
+  - OAuth connect: 成功
+  - image scheduled publish: 成功
+  - reels scheduled publish: 成功
+
+代表的な成功シグナル:
+- `scheduledPost.status=posted`
+- `delivery.status=posted`
+- `delivery.provider_post_id` が記録される
+- `publishLog.result=published`
 
 ## X OAuth Auto Connect
 - `POST /api/auth/x/start` (auth required)
