@@ -206,7 +206,14 @@ export class ThreadsProviderClient implements ProviderClient {
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const requestTimeoutMs =
+      input.mediaKind === "video"
+        ? Math.max(
+            REQUEST_TIMEOUT_MS,
+            getVideoPublishRetryCount() * getVideoPublishRetryIntervalMs() + 30_000
+          )
+        : REQUEST_TIMEOUT_MS;
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
 
     try {
       let activeAccessToken = input.accessToken;
