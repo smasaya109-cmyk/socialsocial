@@ -200,20 +200,18 @@ export class InstagramProviderClient implements ProviderClient {
         };
       }
 
-      if (input.mediaKind === "video") {
-        const ready = await waitUntilContainerReady({
-          apiBase,
-          creationId,
-          accessToken: input.accessToken,
-          signal: controller.signal
-        });
-        if (!ready.ok) {
-          return {
-            ok: false,
-            errorCode: ready.errorCode,
-            providerResponseMasked: ready.masked
-          };
-        }
+      const ready = await waitUntilContainerReady({
+        apiBase,
+        creationId,
+        accessToken: input.accessToken,
+        signal: controller.signal
+      });
+      if (!ready.ok) {
+        return {
+          ok: false,
+          errorCode: ready.errorCode,
+          providerResponseMasked: ready.masked
+        };
       }
 
       const publishUrl = `${apiBase}/${input.providerAccountId}/media_publish`;
