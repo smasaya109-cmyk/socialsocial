@@ -1,4 +1,5 @@
 import type { ProviderClient, ProviderPublishInput, ProviderPublishResult } from "@/lib/providers/types";
+import { refreshThreadsLongLivedToken } from "@/lib/providers/meta/oauth";
 
 const REQUEST_TIMEOUT_MS = 20_000;
 const DEFAULT_VIDEO_PUBLISH_RETRY_INTERVAL_MS = 5_000;
@@ -213,13 +214,16 @@ export class ThreadsProviderClient implements ProviderClient {
 
       const publishRetryCount = input.mediaKind === "video" ? getVideoPublishRetryCount() : 1;
       const publishRetryIntervalMs = getVideoPublishRetryIntervalMs();
+      let activeAccessToken = input.accessToken;
+      let rotatedAccessToken: string | undefined;
+      let rotatedExpiresIn: number | undefined;
       let published: Awaited<ReturnType<typeof publishContainer>> | null = null;
 
       for (let attempt = 1; attempt <= publishRetryCount; attempt += 1) {
         published = await publishContainer({
           apiBase,
           accountId,
-          accessToken: input.accessToken,
+          accessToken: activeAccessToken,
           creationId: created.creationId,
           signal: controller.signal
         });
@@ -227,6 +231,21 @@ export class ThreadsProviderClient implements ProviderClient {
         if (published.ok) break;
 
         const payload = parseMetaError(published.raw);
+        if (published.status === 401 || payload?.error?.code === 190) {
+          try {
+            const refreshed = await refreshThreadsLongLivedToken(activeAccessToken);
+            if (refreshed.access_token) {
+              activeAccessToken = refreshed.access_token;
+              rotatedAccessToken = refreshed.access_token;
+              rotatedExpiresIn = typeof refreshed.expires_in === "number" ? refreshed.expires_in : undefined;
+              if (attempt < publishRetryCount) {
+                continue;
+              }
+            }
+          } catch {
+            // Fall through to classified unauthorized response below.
+          }
+        }
         if (input.mediaKind === "video" && attempt < publishRetryCount && shouldRetryVideoPublish(published.status, payload)) {
           await sleep(publishRetryIntervalMs);
           continue;
@@ -235,7 +254,9 @@ export class ThreadsProviderClient implements ProviderClient {
         return {
           ok: false,
           errorCode: classifyThreadsError(published.status, payload),
-          providerResponseMasked: `publish status=${published.status} body=${maskSnippet(payload?.error?.message || published.raw)}`
+          providerResponseMasked: `publish status=${published.status} body=${maskSnippet(payload?.error?.message || published.raw)}`,
+          rotatedAccessToken,
+          rotatedExpiresIn
         };
       }
 
@@ -243,14 +264,18 @@ export class ThreadsProviderClient implements ProviderClient {
         return {
           ok: false,
           errorCode: "THREADS_VIDEO_PROCESSING_TIMEOUT",
-          providerResponseMasked: "threads_video_processing_timeout"
+          providerResponseMasked: "threads_video_processing_timeout",
+          rotatedAccessToken,
+          rotatedExpiresIn
         };
       }
 
       return {
         ok: true,
         providerPostId: published.providerPostId,
-        providerResponseMasked: "status=200"
+        providerResponseMasked: "status=200",
+        rotatedAccessToken,
+        rotatedExpiresIn
       };
     } catch (error) {
       const err = error as { name?: string; message?: string } | undefined;

@@ -3,6 +3,7 @@ import { getSupabaseAdminClient } from "@/lib/db/supabase";
 import { redactToken } from "@/lib/logging/redaction";
 import {
   exchangeThreadsCodeForToken,
+  exchangeThreadsLongLivedToken,
   maskMetaErrorMessage,
   resolveThreadsProfile
 } from "@/lib/providers/meta/oauth";
@@ -71,11 +72,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Token exchange returned no access token" }, { status: 502 });
     }
 
-    const account = await resolveThreadsProfile(token.access_token);
+    const longLivedToken = await exchangeThreadsLongLivedToken(token.access_token);
+    if (!longLivedToken.access_token) {
+      return NextResponse.json({ error: "Long-lived token exchange returned no access token" }, { status: 502 });
+    }
+
+    const account = await resolveThreadsProfile(longLivedToken.access_token);
     const encryptedAccess = encryptSecret(account.tokenToStore);
     const tokenExpiresAt =
-      typeof token.expires_in === "number"
-        ? new Date(Date.now() + token.expires_in * 1000).toISOString()
+      typeof longLivedToken.expires_in === "number"
+        ? new Date(Date.now() + longLivedToken.expires_in * 1000).toISOString()
         : null;
 
     const { error: upsertError } = await supabase.from("social_connections").upsert(

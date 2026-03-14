@@ -95,6 +95,34 @@ export async function exchangeThreadsCodeForToken(input: {
   return JSON.parse(text) as MetaTokenResponse;
 }
 
+export async function exchangeThreadsLongLivedToken(shortLivedAccessToken: string): Promise<MetaTokenResponse> {
+  const params = new URLSearchParams({
+    grant_type: "th_exchange_token",
+    client_secret: shortLivedAccessToken
+  });
+
+  const response = await fetch(`${THREADS_GRAPH_BASE}/access_token?${params.toString()}`);
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`threads_long_lived_exchange_failed:${response.status}:${maskSnippet(text)}`);
+  }
+  return JSON.parse(text) as MetaTokenResponse;
+}
+
+export async function refreshThreadsLongLivedToken(longLivedAccessToken: string): Promise<MetaTokenResponse> {
+  const params = new URLSearchParams({
+    grant_type: "th_refresh_token",
+    access_token: longLivedAccessToken
+  });
+
+  const response = await fetch(`${THREADS_GRAPH_BASE}/refresh_access_token?${params.toString()}`);
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`threads_long_lived_refresh_failed:${response.status}:${maskSnippet(text)}`);
+  }
+  return JSON.parse(text) as MetaTokenResponse;
+}
+
 export async function resolveInstagramBusinessAccount(userAccessToken: string): Promise<{
   providerAccountId: string;
   tokenToStore: string;
