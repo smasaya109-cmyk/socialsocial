@@ -18,7 +18,7 @@ function maskSnippet(text: string): string {
   return text
     .replace(/https?:\/\/[^\s]+/g, "[redacted-url]")
     .replace(/\s+/g, " ")
-    .slice(0, 240);
+    .slice(0, 480);
 }
 
 function parseMetaError(raw: string): MetaErrorPayload | null {
