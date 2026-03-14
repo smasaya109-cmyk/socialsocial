@@ -19,6 +19,7 @@ type Connection = {
   provider: "x" | "instagram" | "threads" | "tiktok";
   provider_account_id: string;
   created_at: string;
+  updated_at?: string;
 };
 
 type Asset = {
@@ -474,9 +475,9 @@ export default function WorkbenchPage() {
     if (!supabaseUrl || !supabaseAnon) return;
 
     const query = new URLSearchParams({
-      select: "id,provider,provider_account_id,created_at",
+      select: "id,provider,provider_account_id,created_at,updated_at",
       brand_id: `eq.${targetBrandId}`,
-      order: "created_at.desc"
+      order: "updated_at.desc"
     });
 
     const response = await fetch(`${supabaseUrl}/rest/v1/social_connections?${query.toString()}`, {
