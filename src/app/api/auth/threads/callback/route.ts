@@ -72,7 +72,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Token exchange returned no access token" }, { status: 502 });
     }
 
-    const longLivedToken = await exchangeThreadsLongLivedToken(token.access_token);
+    const longLivedToken = await exchangeThreadsLongLivedToken({
+      clientSecret: env.clientSecret as string,
+      shortLivedAccessToken: token.access_token
+    });
     if (!longLivedToken.access_token) {
       return NextResponse.json({ error: "Long-lived token exchange returned no access token" }, { status: 502 });
     }

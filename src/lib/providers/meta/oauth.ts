@@ -95,10 +95,14 @@ export async function exchangeThreadsCodeForToken(input: {
   return JSON.parse(text) as MetaTokenResponse;
 }
 
-export async function exchangeThreadsLongLivedToken(shortLivedAccessToken: string): Promise<MetaTokenResponse> {
+export async function exchangeThreadsLongLivedToken(input: {
+  clientSecret: string;
+  shortLivedAccessToken: string;
+}): Promise<MetaTokenResponse> {
   const params = new URLSearchParams({
     grant_type: "th_exchange_token",
-    client_secret: shortLivedAccessToken
+    client_secret: input.clientSecret,
+    access_token: input.shortLivedAccessToken
   });
 
   const response = await fetch(`${THREADS_GRAPH_BASE}/access_token?${params.toString()}`);
