@@ -347,6 +347,51 @@ li {
   background: #eff4ff;
 }
 
+.wb-connection-state {
+  border: 1px solid #d9e4f2;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f3f8ff 100%);
+  padding: 10px;
+  margin: 8px 0 10px;
+}
+
+.wb-connection-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.wb-state-pill {
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid #d8e2ef;
+  background: #fff;
+  color: #64748b;
+}
+
+.wb-state-pill.ready {
+  border-color: #8edacd;
+  background: #ecfdf8;
+  color: #0f766e;
+}
+
+.wb-connection-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.wb-connection-meta p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .wb-brand-item {
   border: 1px solid #d8e2f0;
   border-radius: 10px;
@@ -648,6 +693,29 @@ li {
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 10px;
+}
+
+.wb-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.wb-review-item {
+  border: 1px solid #d8e2ef;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #fff;
+  color: #475569;
+}
+
+.wb-review-item.done {
+  border-color: #8edacd;
+  background: #ecfdf8;
+  color: #0f766e;
 }
 
 @media (max-width: 1180px) {

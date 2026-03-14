@@ -106,6 +106,18 @@ function dateLabel(input: string): string {
   return new Date(input).toLocaleString();
 }
 
+function relativeTimeLabel(input?: string): string {
+  if (!input) return "unknown";
+  const deltaMs = Date.now() - new Date(input).getTime();
+  const minutes = Math.round(deltaMs / 60000);
+  if (Math.abs(minutes) < 1) return "just now";
+  if (Math.abs(minutes) < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
 function initials(name: string): string {
   return name
     .split(" ")
@@ -169,6 +181,12 @@ function matchesColumn(item: QueueItem, column: ColumnView): boolean {
   if (column === "queue") return ["scheduled", "queued", "processing"].includes(item.status);
   if (column === "sent") return item.status === "posted";
   return ["failed", "canceled"].includes(item.status);
+}
+
+function providerHint(provider: Provider): string {
+  if (provider === "x") return "Fastest path for reviewer demos. OAuth, text-first flow, direct publish.";
+  if (provider === "instagram") return "Requires Meta app approval path, connected Facebook Page, and an image or reel asset.";
+  return "Supports text, image, and video. Reconnect if the access token rotates or expires.";
 }
 
 export default function WorkbenchPage() {
@@ -313,6 +331,18 @@ export default function WorkbenchPage() {
     () => connections.filter((conn) => conn.provider === provider),
     [connections, provider]
   );
+
+  const latestProviderConnection = providerConnections[0] ?? null;
+
+  const reviewReadiness = useMemo(() => {
+    const requiresAsset = provider === "instagram";
+    return {
+      auth: hasAuth,
+      brand: Boolean(brandId),
+      connection: Boolean(latestProviderConnection),
+      asset: !requiresAsset || Boolean(assetId)
+    };
+  }, [assetId, brandId, hasAuth, latestProviderConnection, provider]);
 
   const connectionCountByProvider = useMemo(() => {
     return {
@@ -892,13 +922,56 @@ export default function WorkbenchPage() {
             <button className="btn wb-btn" disabled={busy || !hasAuth || !brandId} onClick={() => loadConnections()}>
               Reload All Connections
             </button>
+            <div className="wb-connection-state">
+              <div className="wb-connection-head">
+                <strong>{providerLabel(provider)} Status</strong>
+                <span className={`wb-state-pill ${latestProviderConnection ? "ready" : "idle"}`}>
+                  {latestProviderConnection ? "Ready" : "Needs connect"}
+                </span>
+              </div>
+              <p className="muted">{providerHint(provider)}</p>
+              {latestProviderConnection ? (
+                <div className="wb-connection-meta">
+                  <p><strong>Latest account</strong> {latestProviderConnection.provider_account_id}</p>
+                  <p><strong>Updated</strong> {relativeTimeLabel(latestProviderConnection.updated_at || latestProviderConnection.created_at)}</p>
+                  <p><strong>Connection ID</strong> {latestProviderConnection.id.slice(0, 8)}...</p>
+                </div>
+              ) : (
+                <p className="wb-inline-warn">No {providerLabel(provider)} connection yet. Run OAuth, then reload this panel.</p>
+              )}
+            </div>
             <select className="wb-input" value={connectionId} onChange={(e) => setConnectionId(e.target.value)}>
               <option value="">select connection</option>
               {providerConnections.map((conn) => (
-                <option key={conn.id} value={conn.id}>{conn.provider_account_id}</option>
+                <option key={conn.id} value={conn.id}>
+                  {conn.provider_account_id} ({relativeTimeLabel(conn.updated_at || conn.created_at)})
+                </option>
               ))}
             </select>
             <p className="muted">{providerConnections.length} {providerLabel(provider)} account(s)</p>
+          </div>
+
+          <div className="wb-panel">
+            <h3>Review Ready</h3>
+            <div className="wb-review-grid">
+              <div className={`wb-review-item ${reviewReadiness.auth ? "done" : ""}`}>Auth</div>
+              <div className={`wb-review-item ${reviewReadiness.brand ? "done" : ""}`}>Brand</div>
+              <div className={`wb-review-item ${reviewReadiness.connection ? "done" : ""}`}>Connection</div>
+              <div className={`wb-review-item ${reviewReadiness.asset ? "done" : ""}`}>Asset</div>
+            </div>
+            <p className="muted">
+              {reviewReadiness.auth && reviewReadiness.brand && reviewReadiness.connection && reviewReadiness.asset
+                ? `${providerLabel(provider)} can be demoed from this workspace.`
+                : `Next: ${
+                    !reviewReadiness.auth
+                      ? "login"
+                      : !reviewReadiness.brand
+                        ? "create/select a brand"
+                        : !reviewReadiness.connection
+                          ? `connect ${providerLabel(provider)}`
+                          : "attach an asset"
+                  }.`}
+            </p>
           </div>
 
           <div className="wb-panel">
