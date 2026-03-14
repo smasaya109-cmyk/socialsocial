@@ -31,6 +31,17 @@ function parseMetaError(raw: string): MetaErrorPayload | null {
   }
 }
 
+function formatMetaErrorForLog(payload: MetaErrorPayload | null, fallbackRaw: string): string {
+  if (!payload?.error) return maskSnippet(fallbackRaw);
+  const parts = [
+    payload.error.type ? `type=${payload.error.type}` : null,
+    typeof payload.error.code === "number" ? `code=${payload.error.code}` : null,
+    typeof payload.error.error_subcode === "number" ? `subcode=${payload.error.error_subcode}` : null,
+    payload.error.message ? `message=${payload.error.message}` : null
+  ].filter(Boolean);
+  return maskSnippet(parts.join(" "));
+}
+
 function classifyThreadsError(status: number, payload: MetaErrorPayload | null): string {
   const code = payload?.error?.code;
   const message = (payload?.error?.message || "").toLowerCase();
@@ -237,7 +248,7 @@ export class ThreadsProviderClient implements ProviderClient {
         return {
           ok: false,
           errorCode: classifyThreadsError(created.status, payload),
-          providerResponseMasked: `create status=${created.status} body=${maskSnippet(payload?.error?.message || created.raw)}`,
+          providerResponseMasked: `create status=${created.status} body=${formatMetaErrorForLog(payload, created.raw)}`,
           rotatedAccessToken,
           rotatedExpiresIn
         };
@@ -282,7 +293,7 @@ export class ThreadsProviderClient implements ProviderClient {
         return {
           ok: false,
           errorCode: classifyThreadsError(published.status, payload),
-          providerResponseMasked: `publish status=${published.status} body=${maskSnippet(payload?.error?.message || published.raw)}`,
+          providerResponseMasked: `publish status=${published.status} body=${formatMetaErrorForLog(payload, published.raw)}`,
           rotatedAccessToken,
           rotatedExpiresIn
         };
