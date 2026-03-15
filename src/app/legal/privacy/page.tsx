@@ -2,52 +2,52 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
-  description: "Social Auto Publisher の個人情報保護方針"
+  description: "Privacy policy for Social Auto Publisher"
 };
 
 export default function PrivacyPage() {
   return (
     <main>
       <h1>Privacy Policy</h1>
-      <p>最終更新日: 2026-02-20</p>
+      <p>Last updated: 2026-02-20</p>
 
-      <h2>1. 収集する情報</h2>
+      <h2>1. Information We Collect</h2>
       <ul>
-        <li>アカウント情報（メールアドレス、ユーザーID）</li>
-        <li>ブランド情報、予約投稿データ、素材メタデータ</li>
-        <li>SNS連携に必要なOAuthトークン（暗号化保存）</li>
+        <li>Account information such as email address and user ID</li>
+        <li>Brand data, scheduled post data, and media asset metadata</li>
+        <li>OAuth tokens required for connected social accounts, stored in encrypted form</li>
       </ul>
 
-      <h2>2. 利用目的</h2>
+      <h2>2. How We Use Information</h2>
       <ul>
-        <li>サービス提供（予約・自動投稿、ブランド管理）</li>
-        <li>障害対応・不正検知・運用監視</li>
-        <li>課金処理、請求管理、機能改善</li>
+        <li>To provide scheduling, publishing, and brand workspace features</li>
+        <li>To monitor service health, detect abuse, and investigate incidents</li>
+        <li>To support billing, account management, and product improvement</li>
       </ul>
 
-      <h2>3. 保存期間</h2>
+      <h2>3. Retention Period</h2>
       <ul>
-        <li>Free: 素材保持 7日、将来予約は 7日先まで</li>
-        <li>Solo: 素材保持 90日</li>
-        <li>Creator: 素材保持 180日</li>
-        <li>Studio: 素材保持 365日</li>
-        <li>OAuthトークン: 連携中のみ保持し、解除時に削除対象とします</li>
+        <li>Free: assets retained for 7 days, future scheduling up to 7 days</li>
+        <li>Solo: assets retained for 90 days</li>
+        <li>Creator: assets retained for 180 days</li>
+        <li>Studio: assets retained for 365 days</li>
+        <li>OAuth tokens are retained only while the connection remains active and are deleted when the connection is removed</li>
       </ul>
 
-      <h2>4. 第三者提供</h2>
+      <h2>4. Third-Party Sharing</h2>
       <ul>
-        <li>SNS API提供者（Meta, X, TikTok等）への投稿実行通信</li>
-        <li>決済、メール送信、監視基盤などの外部委託先</li>
+        <li>Social platform API providers such as Meta, X, and TikTok for publishing actions</li>
+        <li>Service providers used for payments, email delivery, and monitoring infrastructure</li>
       </ul>
 
-      <h2>5. セキュリティ</h2>
+      <h2>5. Security</h2>
       <ul>
-        <li>トークン暗号化、アクセス制御、テナント分離</li>
-        <li>署名URLと機密データのログマスキング</li>
+        <li>Encrypted token storage, access control, and tenant isolation</li>
+        <li>Signed URL usage and masking of sensitive data in logs</li>
       </ul>
 
-      <h2>6. お問い合わせ</h2>
-      <p>privacy@example.com（仮）</p>
+      <h2>6. Contact</h2>
+      <p>s.masaya109@gmail.com</p>
     </main>
   );
 }

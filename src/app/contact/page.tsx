@@ -2,25 +2,25 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Contact",
-  description: "Social Auto Publisher へのお問い合わせ"
+  description: "Contact information for Social Auto Publisher"
 };
 
 export default function ContactPage() {
   return (
     <main>
       <h1>Contact</h1>
-      <p>お問い合わせは以下の窓口をご利用ください。</p>
+      <p>Please use the contact method below for support and account-related requests.</p>
 
-      <h2>連絡方法</h2>
+      <h2>Contact Method</h2>
       <ul>
-        <li>メール: contact@example.com（仮）</li>
+        <li>Email: s.masaya109@gmail.com</li>
       </ul>
 
-      <h2>対応範囲</h2>
+      <h2>Supported Topics</h2>
       <ul>
-        <li>課金・プラン変更に関する問い合わせ</li>
-        <li>不具合報告、運用上の質問</li>
-        <li>データ削除依頼</li>
+        <li>Billing and subscription change requests</li>
+        <li>Bug reports and operational questions</li>
+        <li>Data deletion requests</li>
       </ul>
     </main>
   );

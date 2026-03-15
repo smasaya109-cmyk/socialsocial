@@ -2,35 +2,35 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
-  description: "Social Auto Publisher の利用規約"
+  description: "Terms of service for Social Auto Publisher"
 };
 
 export default function TermsPage() {
   return (
     <main>
       <h1>Terms of Service</h1>
-      <p>最終更新日: 2026-02-20</p>
+      <p>Last updated: 2026-02-20</p>
 
-      <h2>1. 適用範囲</h2>
-      <p>本規約は、Social Auto Publisher の利用に適用されます。</p>
+      <h2>1. Scope</h2>
+      <p>These terms apply to the use of Social Auto Publisher and its related services.</p>
 
-      <h2>2. 禁止行為</h2>
+      <h2>2. Prohibited Conduct</h2>
       <ul>
-        <li>スパム投稿、違法行為、第三者権利の侵害</li>
-        <li>不正アクセス、認証情報の不正利用</li>
+        <li>Spam publishing, unlawful conduct, or infringement of third-party rights</li>
+        <li>Unauthorized access or misuse of authentication credentials</li>
       </ul>
 
-      <h2>3. 料金と解約</h2>
+      <h2>3. Fees and Cancellation</h2>
       <ul>
-        <li>プラン料金は別途定める価格表に従います</li>
-        <li>解約は次回請求日前までの手続きで反映されます</li>
+        <li>Plan pricing follows the applicable pricing page or billing agreement</li>
+        <li>Cancellations take effect according to the billing cycle and cancellation timing</li>
       </ul>
 
-      <h2>4. 免責</h2>
-      <p>SNS API仕様変更や外部障害に起因する影響について、当社は合理的範囲で対応します。</p>
+      <h2>4. Disclaimer</h2>
+      <p>We will respond reasonably to issues caused by external platform API changes or third-party service outages, but we cannot guarantee uninterrupted availability.</p>
 
-      <h2>5. 規約変更</h2>
-      <p>本規約は必要に応じて改定され、改定後は公開時点から有効となります。</p>
+      <h2>5. Changes to These Terms</h2>
+      <p>These terms may be updated as needed, and revised terms become effective once published on this page.</p>
     </main>
   );
 }

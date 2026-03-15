@@ -2,33 +2,33 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Data Deletion",
-  description: "Social Auto Publisher のデータ削除ポリシー"
+  description: "Data deletion policy for Social Auto Publisher"
 };
 
 export default function DataDeletionPage() {
   return (
     <main>
       <h1>Data Deletion</h1>
-      <p>最終更新日: 2026-02-20</p>
+      <p>Last updated: 2026-02-20</p>
 
-      <h2>1. 削除依頼方法</h2>
-      <p>削除依頼は contact@example.com（仮）宛のメール、またはサポート窓口から受け付けます。</p>
+      <h2>1. How to Request Deletion</h2>
+      <p>Deletion requests can be submitted by email to s.masaya109@gmail.com or through our support contact channel.</p>
 
-      <h2>2. 削除対象</h2>
+      <h2>2. Data Covered by Deletion Requests</h2>
       <ul>
-        <li>SNS連携トークン</li>
-        <li>投稿データ、予約データ、素材メタデータ</li>
-        <li>運用ログ（法令または監査要件で保持が必要なものを除く）</li>
+        <li>Connected social account tokens</li>
+        <li>Post data, scheduled post data, and media asset metadata</li>
+        <li>Operational logs, except where retention is required by law or audit obligations</li>
       </ul>
 
-      <h2>3. 処理目安</h2>
-      <p>依頼内容を確認後、通常は数営業日以内を目安に順次対応します。</p>
+      <h2>3. Processing Time</h2>
+      <p>After verification, requests are normally processed within a few business days.</p>
 
-      <h2>4. 本人確認</h2>
-      <p>不正削除を防ぐため、必要に応じて本人確認情報の提示を依頼する場合があります。</p>
+      <h2>4. Identity Verification</h2>
+      <p>We may request additional information to verify identity before processing a deletion request.</p>
 
-      <h2>5. 問い合わせ先</h2>
-      <p>contact@example.com（仮）</p>
+      <h2>5. Contact</h2>
+      <p>s.masaya109@gmail.com</p>
     </main>
   );
 }
