@@ -1111,29 +1111,6 @@ export default function WorkbenchPage() {
           </div>
 
           <div className="wb-panel">
-            <h3>Assets</h3>
-            <button className="btn wb-btn" disabled={busy || !hasAuth || !brandId} onClick={() => loadAssets()}>
-              Reload Assets
-            </button>
-            <input
-              className="wb-input"
-              type="file"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                void uploadAsset(file);
-              }}
-            />
-            <select className="wb-input" value={assetId} onChange={(e) => setAssetId(e.target.value)}>
-              <option value="">no asset</option>
-              {assets.map((asset) => (
-                <option key={asset.id} value={asset.id}>{asset.kind} / {asset.file_name}</option>
-              ))}
-            </select>
-            <p className="muted">{uploadingAsset ? "uploading..." : `${assets.length} uploaded`}</p>
-          </div>
-
-          <div className="wb-panel">
             <h3>Drafts</h3>
             <button className="btn wb-btn" onClick={saveDraft}>Save Current</button>
             <div className="wb-draft-list">
@@ -1186,9 +1163,14 @@ export default function WorkbenchPage() {
                   <h4>Media</h4>
                   <p className="muted">Attach an image or video directly from the composer.</p>
                 </div>
-                <span className={`wb-state-pill ${selectedAsset ? "ready" : "idle"}`}>
-                  {selectedAsset ? `${selectedAsset.kind} selected` : "No media"}
-                </span>
+                <div className="wb-media-actions">
+                  <span className={`wb-state-pill ${selectedAsset ? "ready" : "idle"}`}>
+                    {selectedAsset ? `${selectedAsset.kind} selected` : "No media"}
+                  </span>
+                  <button className="btn wb-btn-inline" disabled={busy || !hasAuth || !brandId} onClick={() => loadAssets()}>
+                    Reload Media
+                  </button>
+                </div>
               </div>
 
               <div className="wb-row-2">
