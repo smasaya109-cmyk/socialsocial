@@ -68,6 +68,7 @@ type ScheduleResponse = {
 
 const BASE_URL = "";
 const DRAFTS_STORAGE_KEY = "wb-drafts-v2";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://socialsocial-three.vercel.app";
 
 function formatApiError(input: unknown, fallback: string): string {
   if (!input) return fallback;
@@ -187,6 +188,56 @@ function providerHint(provider: Provider): string {
   if (provider === "x") return "Fastest path for reviewer demos. OAuth, text-first flow, direct publish.";
   if (provider === "instagram") return "Requires Meta app approval path, connected Facebook Page, and an image or reel asset.";
   return "Supports text, image, and video. Reconnect if the access token rotates or expires.";
+}
+
+function reviewRequirements(provider: Provider): string[] {
+  if (provider === "instagram") {
+    return [
+      "Use a Professional Instagram account connected to a Facebook Page",
+      "Show public privacy, terms, contact, and data deletion routes",
+      "Attach an image or reel asset before queueing",
+      "Demonstrate queued to posted state in the same session"
+    ];
+  }
+  if (provider === "threads") {
+    return [
+      "Use the Threads app credentials and callback registered in Threads settings",
+      "Show legal pages and contact route without authentication",
+      "Connect, queue, and verify a posted text, image, or video item",
+      "Keep activity logs visible for reviewer troubleshooting"
+    ];
+  }
+  return [
+    "Use OAuth with posting scope enabled",
+    "Queue a post and confirm posted status",
+    "Show public legal and contact routes",
+    "Expose failure states and retry actions in the queue"
+  ];
+}
+
+function reviewSteps(provider: Provider): string[] {
+  if (provider === "instagram") {
+    return [
+      "Login and select the review brand",
+      "Connect Instagram and confirm the latest connected account",
+      "Upload an image or reel asset",
+      "Queue the post and use Check to reveal providerPostId"
+    ];
+  }
+  if (provider === "threads") {
+    return [
+      "Login and select the review brand",
+      "Connect Threads and reload connections",
+      "Queue text, image, or video with the latest connection selected",
+      "Open Check and activity logs to confirm delivery"
+    ];
+  }
+  return [
+    "Login and select the review brand",
+    "Connect X",
+    "Queue a text post",
+    "Use Check to show posted status and provider ID"
+  ];
 }
 
 export default function WorkbenchPage() {
@@ -975,6 +1026,25 @@ export default function WorkbenchPage() {
           </div>
 
           <div className="wb-panel">
+            <h3>Review Links</h3>
+            <div className="wb-link-list">
+              <a href={`${APP_URL}/legal/privacy`} target="_blank" rel="noreferrer">
+                Privacy Policy
+              </a>
+              <a href={`${APP_URL}/legal/terms`} target="_blank" rel="noreferrer">
+                Terms of Service
+              </a>
+              <a href={`${APP_URL}/legal/data-deletion`} target="_blank" rel="noreferrer">
+                Data Deletion
+              </a>
+              <a href={`${APP_URL}/contact`} target="_blank" rel="noreferrer">
+                Contact
+              </a>
+            </div>
+            <p className="muted">Meta reviewers typically validate these public routes before or during app review.</p>
+          </div>
+
+          <div className="wb-panel">
             <h3>Assets</h3>
             <button className="btn wb-btn" disabled={busy || !hasAuth || !brandId} onClick={() => loadAssets()}>
               Reload Assets
@@ -1056,6 +1126,32 @@ export default function WorkbenchPage() {
               <p className="wb-preview-provider">{providerLabel(provider)}</p>
               <p className="wb-preview-text">{postBody || "Your post preview will appear here"}</p>
               <p className="muted">{scheduledAtLocal ? `Scheduled: ${dateLabel(parseDateTimeLocal(scheduledAtLocal))}` : "No schedule"}</p>
+            </div>
+          </div>
+
+          <div className="wb-panel">
+            <div className="wb-rail-head">
+              <h3>Reviewer Demo</h3>
+              <span className="wb-state-pill ready">Review flow</span>
+            </div>
+            <p className="muted">{providerHint(provider)}</p>
+            <div className="wb-review-columns">
+              <div>
+                <strong>Review criteria</strong>
+                <ul className="wb-review-list">
+                  {reviewRequirements(provider).map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <strong>Reviewer flow</strong>
+                <ol className="wb-review-list ordered">
+                  {reviewSteps(provider).map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ol>
+              </div>
             </div>
           </div>
         </section>

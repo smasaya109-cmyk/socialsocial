@@ -718,6 +718,44 @@ li {
   color: #0f766e;
 }
 
+.wb-link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wb-link-list a {
+  color: #1d4ed8;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wb-link-list a:hover {
+  text-decoration: underline;
+}
+
+.wb-review-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.wb-review-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.wb-review-list.ordered {
+  padding-left: 20px;
+}
+
 @media (max-width: 1180px) {
   .wb-layout {
     grid-template-columns: 1fr;
@@ -738,6 +776,10 @@ li {
   }
 
   .wb-row-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .wb-review-columns {
     grid-template-columns: 1fr;
   }
 
