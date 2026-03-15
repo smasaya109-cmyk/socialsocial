@@ -69,6 +69,9 @@ type ScheduleResponse = {
 const BASE_URL = "";
 const DRAFTS_STORAGE_KEY = "wb-drafts-v2";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://socialsocial-three.vercel.app";
+const REVIEWER_EMAIL = process.env.NEXT_PUBLIC_REVIEWER_EMAIL || "";
+const REVIEWER_BRAND = process.env.NEXT_PUBLIC_REVIEWER_BRAND_NAME || "";
+const REVIEWER_NOTE = process.env.NEXT_PUBLIC_REVIEWER_NOTE || "";
 
 function formatApiError(input: unknown, fallback: string): string {
   if (!input) return fallback;
@@ -240,6 +243,16 @@ function reviewSteps(provider: Provider): string[] {
   ];
 }
 
+function reviewerAccessSummary(): string {
+  if (REVIEWER_EMAIL && REVIEWER_BRAND) {
+    return `Reviewer login is pre-provisioned for ${REVIEWER_EMAIL}. Select ${REVIEWER_BRAND} after login.`;
+  }
+  if (REVIEWER_EMAIL) {
+    return `Reviewer login is pre-provisioned for ${REVIEWER_EMAIL}.`;
+  }
+  return "Reviewer login is not configured in public env yet. Add NEXT_PUBLIC_REVIEWER_EMAIL and NEXT_PUBLIC_REVIEWER_BRAND_NAME before sharing this screen.";
+}
+
 export default function WorkbenchPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -384,6 +397,7 @@ export default function WorkbenchPage() {
   );
 
   const latestProviderConnection = providerConnections[0] ?? null;
+  const selectedAsset = useMemo(() => assets.find((asset) => asset.id === assetId) ?? null, [assets, assetId]);
 
   const reviewReadiness = useMemo(() => {
     const requiresAsset = provider === "instagram";
@@ -1045,6 +1059,31 @@ export default function WorkbenchPage() {
           </div>
 
           <div className="wb-panel">
+            <div className="wb-rail-head">
+              <h3>Reviewer Access</h3>
+              <span className={`wb-state-pill ${REVIEWER_EMAIL ? "ready" : "idle"}`}>
+                {REVIEWER_EMAIL ? "Configured" : "Pending"}
+              </span>
+            </div>
+            <p className="muted">{reviewerAccessSummary()}</p>
+            <div className="wb-review-access">
+              <div className="wb-review-access-item">
+                <strong>Login email</strong>
+                <span>{REVIEWER_EMAIL || "Set NEXT_PUBLIC_REVIEWER_EMAIL"}</span>
+              </div>
+              <div className="wb-review-access-item">
+                <strong>Review brand</strong>
+                <span>{REVIEWER_BRAND || "Set NEXT_PUBLIC_REVIEWER_BRAND_NAME"}</span>
+              </div>
+              <div className="wb-review-access-item">
+                <strong>Password</strong>
+                <span>Share through the review submission notes, not the public UI.</span>
+              </div>
+            </div>
+            {REVIEWER_NOTE ? <p className="muted">{REVIEWER_NOTE}</p> : null}
+          </div>
+
+          <div className="wb-panel">
             <h3>Assets</h3>
             <button className="btn wb-btn" disabled={busy || !hasAuth || !brandId} onClick={() => loadAssets()}>
               Reload Assets
@@ -1112,6 +1151,49 @@ export default function WorkbenchPage() {
               <button className="btn wb-btn-inline" onClick={() => setPostBody((t) => `${t}\n\n#announcement`)}>Add #announcement</button>
               <button className="btn wb-btn-inline" onClick={() => setPostBody((t) => `${t}\n\nLearn more: https://`)}>Add link CTA</button>
               <button className="btn wb-btn-inline" onClick={() => setPostBody("")}>Clear</button>
+            </div>
+
+            <div className="wb-media-box">
+              <div className="wb-media-head">
+                <div>
+                  <h4>Media</h4>
+                  <p className="muted">Attach an image or video directly from the composer.</p>
+                </div>
+                <span className={`wb-state-pill ${selectedAsset ? "ready" : "idle"}`}>
+                  {selectedAsset ? `${selectedAsset.kind} selected` : "No media"}
+                </span>
+              </div>
+
+              <div className="wb-row-2">
+                <select className="wb-input" value={assetId} onChange={(e) => setAssetId(e.target.value)}>
+                  <option value="">select image or video</option>
+                  {assets.map((asset) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.kind} / {asset.file_name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="wb-input"
+                  type="file"
+                  accept="image/*,video/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    void uploadAsset(file);
+                  }}
+                />
+              </div>
+
+              {selectedAsset ? (
+                <div className="wb-media-meta">
+                  <p><strong>Selected file</strong> {selectedAsset.file_name}</p>
+                  <p><strong>Type</strong> {selectedAsset.kind}</p>
+                  <p><strong>Uploaded</strong> {dateLabel(selectedAsset.created_at)}</p>
+                </div>
+              ) : (
+                <p className="muted">No media selected. X and Threads can post text only. Instagram requires media.</p>
+              )}
             </div>
 
             {provider === "instagram" && !assetId ? <p className="wb-inline-warn">Instagram requires an asset.</p> : null}

@@ -488,6 +488,39 @@ li {
   font-size: 13px;
 }
 
+.wb-media-box {
+  border: 1px solid #d8e2ef;
+  border-radius: 12px;
+  background: #fbfdff;
+  padding: 12px;
+  margin-top: 10px;
+}
+
+.wb-media-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.wb-media-head h4 {
+  margin: 0 0 4px;
+}
+
+.wb-media-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.wb-media-meta p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .wb-preview {
   border: 1px solid #d8e2ef;
   border-radius: 12px;
@@ -739,6 +772,33 @@ li {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.wb-review-access {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.wb-review-access-item {
+  border: 1px solid #d8e2ef;
+  border-radius: 10px;
+  background: #fff;
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wb-review-access-item strong {
+  font-size: 12px;
+}
+
+.wb-review-access-item span {
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .wb-review-list {
