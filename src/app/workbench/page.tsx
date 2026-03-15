@@ -339,6 +339,20 @@ export default function WorkbenchPage() {
   }, [provider, connections, connectionId]);
 
   useEffect(() => {
+    if (!hasAuth || !brandId) {
+      setAssets([]);
+      setAssetId("");
+      return;
+    }
+
+    setAssetId("");
+    void Promise.all([loadConnections(brandId), loadAssets(brandId), loadQueue(brandId)]).catch(() => {
+      // surface errors through explicit user actions and activity log
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandId, hasAuth]);
+
+  useEffect(() => {
     if (!autoRefresh || !hasAuth || !brandId) return;
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
