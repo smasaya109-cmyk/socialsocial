@@ -131,7 +131,7 @@ Step6 着手（初期）:
     - OAuth connect: 成功
     - text publish: 成功
     - image publish: 成功
-    - video publish: 追加調整対象
+    - video publish: 成功
 - TikTok:
   - APIクライアントの枠のみ。実投稿は未対応。
 
@@ -142,7 +142,7 @@ Step6 着手（初期）:
   - OAuth connect: 成功
   - text scheduled publish: 成功
   - image scheduled publish: 成功
-  - video scheduled publish: 未確定（provider依存の追加調整中）
+  - video scheduled publish: 成功
 - Instagram
   - OAuth connect: 成功
   - image scheduled publish: 成功
@@ -207,3 +207,5 @@ Step6 着手（初期）:
 - `docs/steps/step-05-scheduling.md`
 - `docs/steps/step-06-sns-clients.md`
 - `docs/review/meta-instagram-threads-review-checklist.md`
+- `docs/review/meta-review-submission-template.md`
+- `docs/review/reviewer-account-setup.md`
