@@ -702,6 +702,14 @@ export default function WorkbenchPage() {
 
   async function createSchedule() {
     if (!hasAuth || !brandId || !connectionId) return;
+    if (uploadingAsset) {
+      pushLog("wait for media upload to finish before queueing");
+      return;
+    }
+    if (provider === "instagram" && !assetId) {
+      pushLog("instagram requires a selected image or video asset");
+      return;
+    }
     setBusy(true);
     try {
       const response = await fetch(`${BASE_URL}/api/schedules`, {
@@ -1194,12 +1202,19 @@ export default function WorkbenchPage() {
               ) : (
                 <p className="muted">No media selected. X and Threads can post text only. Instagram requires media.</p>
               )}
+              {uploadingAsset ? <p className="wb-inline-warn">Uploading media. Queue Post will unlock when finalize completes.</p> : null}
             </div>
 
             {provider === "instagram" && !assetId ? <p className="wb-inline-warn">Instagram requires an asset.</p> : null}
 
             <div className="cta-row">
-              <button className="btn primary wb-btn-inline" disabled={busy || !hasAuth || !brandId || !connectionId} onClick={createSchedule}>Queue Post</button>
+              <button
+                className="btn primary wb-btn-inline"
+                disabled={busy || uploadingAsset || !hasAuth || !brandId || !connectionId || (provider === "instagram" && !assetId)}
+                onClick={createSchedule}
+              >
+                {uploadingAsset ? "Uploading..." : "Queue Post"}
+              </button>
               {focusedScheduleId ? <button className="btn wb-btn-inline" disabled={busy || !hasAuth} onClick={() => void checkSchedule(focusedScheduleId)}>Check Focused</button> : null}
             </div>
 
