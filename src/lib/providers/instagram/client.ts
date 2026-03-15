@@ -110,8 +110,15 @@ export class InstagramProviderClient implements ProviderClient {
     }
 
     const apiBase = (process.env.INSTAGRAM_API_BASE_URL || "https://graph.facebook.com/v23.0").replace(/\/$/, "");
+    const publishRetryCount = input.mediaKind === "video" ? getVideoPublishRetryCount() : getImagePublishRetryCount();
+    const publishRetryIntervalMs =
+      input.mediaKind === "video" ? getVideoPublishRetryIntervalMs() : getImagePublishRetryIntervalMs();
+    const timeoutBudgetMs =
+      input.mediaKind === "video"
+        ? Math.max(REQUEST_TIMEOUT_MS, publishRetryCount * publishRetryIntervalMs + 30_000)
+        : REQUEST_TIMEOUT_MS;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), timeoutBudgetMs);
 
     try {
       const createUrl = `${apiBase}/${input.providerAccountId}/media`;
@@ -165,9 +172,6 @@ export class InstagramProviderClient implements ProviderClient {
       }
 
       const publishUrl = `${apiBase}/${input.providerAccountId}/media_publish`;
-      const publishRetryCount = input.mediaKind === "video" ? getVideoPublishRetryCount() : getImagePublishRetryCount();
-      const publishRetryIntervalMs =
-        input.mediaKind === "video" ? getVideoPublishRetryIntervalMs() : getImagePublishRetryIntervalMs();
 
       let publishRaw = "";
       let publishJson: unknown = null;
