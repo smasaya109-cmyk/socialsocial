@@ -670,7 +670,12 @@ export default function WorkbenchPage() {
       await loadAssets();
       setAssetId(uploadUrlJson.assetId);
     } catch (error) {
-      pushLog(`asset upload failed: ${error instanceof Error ? error.message : "unknown"}`);
+      const message = error instanceof Error ? error.message : "unknown";
+      if (message === "Failed to fetch") {
+        pushLog("asset upload failed: browser could not reach R2 signed URL. Check R2 bucket CORS for PUT from this app origin.");
+      } else {
+        pushLog(`asset upload failed: ${message}`);
+      }
     } finally {
       setUploadingAsset(false);
     }
