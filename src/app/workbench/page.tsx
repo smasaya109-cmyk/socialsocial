@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Provider = "x" | "instagram" | "threads";
 type QueueStatus = "scheduled" | "queued" | "processing" | "posted" | "failed" | "canceled";
@@ -288,6 +288,7 @@ export default function WorkbenchPage() {
   const [draftTitle, setDraftTitle] = useState("Campaign");
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const previousQueueStatusRef = useRef<Record<string, QueueStatus>>({});
 
   const hasAuth = token.length > 20;
 
@@ -447,6 +448,27 @@ export default function WorkbenchPage() {
   const pushLog = (line: string) => {
     setStatusLog((prev) => [`${new Date().toLocaleTimeString()} ${line}`, ...prev].slice(0, 200));
   };
+
+  useEffect(() => {
+    const previous = previousQueueStatusRef.current;
+    const next: Record<string, QueueStatus> = {};
+
+    for (const item of queue) {
+      next[item.id] = item.status;
+      const prevStatus = previous[item.id];
+      if (!prevStatus || prevStatus === item.status) continue;
+
+      if (item.status === "processing") {
+        pushLog(`schedule=${item.id.slice(0, 8)} status=processing`);
+      } else if (item.status === "posted") {
+        pushLog(`schedule=${item.id.slice(0, 8)} status=posted`);
+      } else if (item.status === "failed" || item.status === "canceled") {
+        pushLog(`schedule=${item.id.slice(0, 8)} status=${item.status} error=${item.error_code ?? "-"}`);
+      }
+    }
+
+    previousQueueStatusRef.current = next;
+  }, [queue]);
 
   function clearSelection() {
     setSelectedIds([]);
