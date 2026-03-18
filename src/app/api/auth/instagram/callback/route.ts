@@ -81,6 +81,7 @@ export async function GET(request: Request) {
         brand_id: stateRow.brand_id,
         provider: "instagram",
         provider_account_id: account.providerAccountId,
+        provider_account_label: account.providerAccountLabel,
         access_token_enc: encryptedAccess.encrypted,
         refresh_token_enc: null,
         key_version: encryptedAccess.keyVersion,

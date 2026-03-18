@@ -129,6 +129,7 @@ export async function refreshThreadsLongLivedToken(longLivedAccessToken: string)
 
 export async function resolveInstagramBusinessAccount(userAccessToken: string): Promise<{
   providerAccountId: string;
+  providerAccountLabel: string | null;
   tokenToStore: string;
 }> {
   const fields = "id,name,access_token,instagram_business_account{id,username}";
@@ -156,6 +157,7 @@ export async function resolveInstagramBusinessAccount(userAccessToken: string): 
 
   return {
     providerAccountId: matched.instagram_business_account.id,
+    providerAccountLabel: matched.instagram_business_account.username ?? null,
     tokenToStore: matched.access_token
   };
 }
@@ -200,6 +202,7 @@ export async function resolveThreadsAccount(userAccessToken: string): Promise<{
 
 export async function resolveThreadsProfile(accessToken: string): Promise<{
   providerAccountId: string;
+  providerAccountLabel: string | null;
   tokenToStore: string;
 }> {
   const params = new URLSearchParams({
@@ -219,6 +222,7 @@ export async function resolveThreadsProfile(accessToken: string): Promise<{
 
   return {
     providerAccountId: parsed.id,
+    providerAccountLabel: parsed.username ?? null,
     tokenToStore: accessToken
   };
 }

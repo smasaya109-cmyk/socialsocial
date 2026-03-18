@@ -53,7 +53,7 @@ async function exchangeCodeForToken(input: {
   return JSON.parse(text) as XTokenResponse;
 }
 
-async function fetchXUserId(accessToken: string): Promise<string> {
+async function fetchXUser(accessToken: string): Promise<{ id: string; label: string | null }> {
   const response = await fetch("https://api.x.com/2/users/me", {
     headers: {
       Authorization: `Bearer ${accessToken}`
@@ -63,12 +63,15 @@ async function fetchXUserId(accessToken: string): Promise<string> {
   if (!response.ok) {
     throw new Error(`x_users_me_failed:${response.status}:${text.slice(0, 200)}`);
   }
-  const parsed = JSON.parse(text) as { data?: { id?: string } };
+  const parsed = JSON.parse(text) as { data?: { id?: string; username?: string; name?: string } };
   const userId = parsed.data?.id;
   if (!userId) {
     throw new Error("x_users_me_missing_id");
   }
-  return userId;
+  return {
+    id: userId,
+    label: parsed.data?.username || parsed.data?.name || null
+  };
 }
 
 export async function GET(request: Request) {
@@ -123,7 +126,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Token exchange returned no access token" }, { status: 502 });
     }
 
-    const providerAccountId = await fetchXUserId(token.access_token);
+    const xUser = await fetchXUser(token.access_token);
     const encryptedAccess = encryptSecret(token.access_token);
     const encryptedRefresh = token.refresh_token ? encryptSecret(token.refresh_token) : null;
     const tokenExpiresAt =
@@ -135,7 +138,8 @@ export async function GET(request: Request) {
       {
         brand_id: stateRow.brand_id,
         provider: "x",
-        provider_account_id: providerAccountId,
+        provider_account_id: xUser.id,
+        provider_account_label: xUser.label,
         access_token_enc: encryptedAccess.encrypted,
         refresh_token_enc: encryptedRefresh?.encrypted ?? null,
         key_version: encryptedAccess.keyVersion,
@@ -158,7 +162,7 @@ export async function GET(request: Request) {
     console.info("[x.callback] connection completed", {
       brandId: stateRow.brand_id,
       userId: stateRow.user_id,
-      providerAccountId,
+      providerAccountId: xUser.id,
       accessToken: redactToken(token.access_token)
     });
 
@@ -166,7 +170,7 @@ export async function GET(request: Request) {
       ok: true,
       provider: "x",
       brandId: stateRow.brand_id,
-      providerAccountId
+      providerAccountId: xUser.id
     });
   } catch (error) {
     const err = error as { message?: string } | undefined;
@@ -176,4 +180,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "OAuth callback failed", provider: "x" }, { status: 500 });
   }
 }
-

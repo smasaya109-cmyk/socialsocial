@@ -18,6 +18,7 @@ type Connection = {
   id: string;
   provider: "x" | "instagram" | "threads" | "tiktok";
   provider_account_id: string;
+  provider_account_label?: string | null;
   created_at: string;
   updated_at?: string;
 };
@@ -191,6 +192,14 @@ function providerHint(provider: Provider): string {
   if (provider === "x") return "Fastest path for reviewer demos. OAuth, text-first flow, direct publish.";
   if (provider === "instagram") return "Requires Meta app approval path, connected Facebook Page, and an image or reel asset.";
   return "Supports text, image, and video. Reconnect if the access token rotates or expires.";
+}
+
+function connectionLabel(connection: Connection): string {
+  const raw = connection.provider_account_label?.trim();
+  if (raw) {
+    return raw.startsWith("@") ? raw : `@${raw}`;
+  }
+  return connection.provider_account_id;
 }
 
 function reviewRequirements(provider: Provider): string[] {
@@ -606,7 +615,7 @@ export default function WorkbenchPage() {
     if (!supabaseUrl || !supabaseAnon) return;
 
     const query = new URLSearchParams({
-      select: "id,provider,provider_account_id,created_at,updated_at",
+      select: "id,provider,provider_account_id,provider_account_label,created_at,updated_at",
       brand_id: `eq.${targetBrandId}`,
       order: "updated_at.desc"
     });
@@ -1046,7 +1055,7 @@ export default function WorkbenchPage() {
               <p className="muted">{providerHint(provider)}</p>
               {latestProviderConnection ? (
                 <div className="wb-connection-meta">
-                  <p><strong>Latest account</strong> {latestProviderConnection.provider_account_id}</p>
+                  <p><strong>Latest account</strong> {connectionLabel(latestProviderConnection)}</p>
                   <p><strong>Updated</strong> {relativeTimeLabel(latestProviderConnection.updated_at || latestProviderConnection.created_at)}</p>
                   <p><strong>Connection ID</strong> {latestProviderConnection.id.slice(0, 8)}...</p>
                 </div>
@@ -1058,7 +1067,7 @@ export default function WorkbenchPage() {
               <option value="">select connection</option>
               {providerConnections.map((conn) => (
                 <option key={conn.id} value={conn.id}>
-                  {conn.provider_account_id} ({relativeTimeLabel(conn.updated_at || conn.created_at)})
+                  {connectionLabel(conn)} ({relativeTimeLabel(conn.updated_at || conn.created_at)})
                 </option>
               ))}
             </select>
